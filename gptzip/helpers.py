@@ -4,6 +4,13 @@ from typing import Any, Optional, Callable
 
 import numpy as np
 
+from logging import config
+import logging
+config.fileConfig("logging.conf", disable_existing_loggers = False)
+
+logger = logging.getLogger(__name__)
+progress = logging.getLogger("progress")
+
 
 def _log_power_of_b(n: int, base: int) -> int:
   """Returns k assuming n = base ** k.
@@ -207,8 +214,11 @@ class _CoderBase:
 
     encoding = symbol is not None
     intervals = self._get_intervals(pdf)
-    if not encoding:
+    if not encoding: # decoding
+      #logger.debug(f"intervals={intervals}")
+      #logger.debug(f"_code={self._code}")
       symbol = np.searchsorted(intervals, self._code, side="right") - 1
+    #logger.debug(f"symbol={symbol}")
     assert 0 <= symbol < pdf.size
     low_pre_split = self._low
     self._low, self._high = intervals[[symbol, symbol + 1]]

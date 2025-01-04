@@ -1,4 +1,12 @@
 import numpy as np
+import decimal
+from decimal import Decimal
+from logging import config
+import logging
+config.fileConfig("logging.conf", disable_existing_loggers = False)
+
+logger = logging.getLogger(__name__)
+progress = logging.getLogger("progress")
 
 def bits_to_bytes(bits: str) -> tuple[bytes, int]:
   """Returns the bytes representation of bitstream and number of padded bits."""
@@ -77,9 +85,18 @@ def normalize_pdf_for_arithmetic_coding(pdf: np.ndarray) -> np.ndarray:
   Returns:
     The normalized probabilities.
   """
-  machine_epsilon = np.finfo(np.float32).eps
+  #logger.debug(f"pdf={pdf}, shape={pdf.shape}")
+  #machine_epsilon = Decimal(np.finfo(np.float32).eps.item())
+  machine_epsilon = np.finfo(np.float32).eps.item()
+  #pdf = np.vectorize(Decimal.from_float)(pdf)
+  #logger.debug(f"new pdf={pdf}, shape={pdf.shape}")
   # Normalize the probabilities to avoid floating-point errors.
+  #logger.debug(f"normalized constants={np.cumsum(pdf, dtype=Decimal)}")
+  #pdf = pdf / np.cumsum(pdf, dtype=Decimal)[-1]
+  #logger.debug(f"normalized constants={np.cumsum(pdf)}")
   pdf = pdf / np.cumsum(pdf)[-1]
+  #logger.debug(f"normalized pdf={pdf}")
   # Ensure all probabilities are sufficiently large to yield distinct cdfs.
   pdf = (1 - 2 * pdf.size * machine_epsilon) * pdf + machine_epsilon
+  #logger.debug(f"finalized pdf={pdf}")
   return pdf
