@@ -2,7 +2,6 @@ from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import BertJapaneseTokenizer, BertModel
 import argparse
-from print_diff_hl import print_diff_hl, get_diff_hl
 from gptzip import ArithmeticCoder
 import os
 import sys
@@ -26,23 +25,15 @@ import torch
 
 model_list = [
 
-#    "rinna/gemma-2-baku-2b-it", # OK
-#    "2121-8/TinySlime-1.1B-v1.0", # NG
-#   "llm-jp/llm-jp-3-13b", # NG
-#    "llm-jp/llm-jp-3-3.7b", # NG
-#    "llm-jp/llm-jp-3-1.8b", # OK
+    "rinna/gemma-2-baku-2b-it",
+    "llm-jp/llm-jp-3-13b",
+#    "2121-8/TinySlime-1.1B-v1.0",
 
-#    "microsoft/Phi-3.5-mini-instruct", # NG
-#    "AXCXEPT/Borea-Phi-3.5-mini-Instruct-Jp", # NG
-#    "gpt2",
-#    "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
-#    "llm-jp/llm-jp-3-172b",
-#    "meta-llama/Llama-3.1-405B-Instruct",
-#    "meta-llama/Llama-3.1-70B-Instruct",
-#    "meta-llama/Llama-3.1-70B",
-#    "meta-llama/Llama-3.1-8B",
-    "meta-llama/Llama-3.2-1B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
+    "llm-jp/llm-jp-3-3.7b",
+    "llm-jp/llm-jp-3-1.8b",
+
+    "microsoft/Phi-3.5-mini-instruct",
+    "AXCXEPT/Borea-Phi-3.5-mini-Instruct-Jp",
     ]
 
 
@@ -84,13 +75,13 @@ if __name__ == "__main__":
         logger.info(f"model={model.__class__}({model_name})")
         progress.info(f"model={model.__class__}({model_name})")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        coder = ArithmeticCoder(lm=model,
+                                tokenizer=tokenizer,
+                                use_cache=False)
         file_list = os.listdir(input_dir)
         logger.debug(f"input files={file_list}")
         for text_path in file_list:
         #for text_path in ["resume_0102.txt"]:
-            coder = ArithmeticCoder(lm=model,
-                                tokenizer=tokenizer,
-                                    use_cache=True)
             total_start = time.time()
             basic_info = f"device={device}, cache={use_cache}, model={model_name}, text={text_path}"
             is_success = True
@@ -98,11 +89,9 @@ if __name__ == "__main__":
             ##msg = Path("../LLMA/alice.txt").read_text(encoding="utf-8")
             ##msg = Path("doda_cv.txt").read_text(encoding="utf-8")
             
-            msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
-            #msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")[0:100] # for test
-            #msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")[0:1200]
-            #msg = "This is a pen.\nThat is an apple."
-            #msg = "This is a pen.\n"
+            #msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
+            msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")[0:1200]
+            
             msg_example = msg[0:40]
             logger.info(f"file={text_path}, contents={msg_example}")
             progress.info(f"file={text_path}, contents={msg_example}")
@@ -128,19 +117,16 @@ if __name__ == "__main__":
             progress.info(f"[2] Decoded: {decoded_string[:text_limit]}")
             logger.debug(f"[2] Decoded: {decoded_string}")
 
-            if msg.rstrip("\r\n") != decoded_string.rstrip("\r\n"):
+            if msg != decoded_string:
                 logger.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
                 progress.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
                 logger.info(f"input: {msg}")
                 logger.info(f"output: {decoded_string}")
-                logger.info(f"diff: {get_diff_hl(msg, decoded_string)}")
                 is_success=False
             
+            print(f"Compression {len(msg)} bytes to {len(code)} bytes.")
             logger.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
             progress.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
-            logger.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes.({basic_info})")
-            progress.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes.({basic_info})")            
-            
             data = f"data: {model_name}-{text_path}, "
             data += f"size: {len(msg)}-{len(code)}, "
             data += f"time: {encode_time}-{decode_time}"
@@ -153,8 +139,6 @@ if __name__ == "__main__":
             summary.info(f"basic info={basic_info}")
             summary.info(f"success?={is_success}")
             summary.info(f"Compression {len(msg)} bytes to {len(code)} bytes")
-            summary.info(f"Compression ratio {len(code)/len(msg)}")
-            summary.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes")
             summary.info(f"{data}: ratio = {ratio}({basic_info})")
             summary.info(f"total time elapsed: {total_end-total_start}")
-            del coder
+            
