@@ -1,3 +1,6 @@
+# This Git repository is a fork of the original repository created for research purposes.I deeply respect and appreciate the work of the original author, and I would like to reach out to them if I make progress in my research.
+
+
 # gptzip
 #### Losslessly encode text natively with arithmetic coding and HuggingFace Transformers
 
