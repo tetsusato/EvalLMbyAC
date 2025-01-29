@@ -215,12 +215,20 @@ Returns:
         #print(f"seq array.shape={input_ids_tensor.shape}") # (1, token数)
         #print(f"tokens={input_ids_tensor[0].tolist()}")
         #print(f"tokens={self.tokenizer.convert_ids_to_tokens(input_ids_tensor[0].tolist())}")
-        input_ids_tensor = torch.cat(
-            [
-                torch.tensor([self.tokenizer.bos_token_id]),
-                input_ids_tensor.flatten(),
-            ]
-        )
+        if "qwen" in str(self.lm.__class__) :
+            input_ids_tensor = torch.cat(
+                [
+                    torch.tensor([151643]), # <|endoftext|>
+                    input_ids_tensor.flatten(),
+                ]
+            )
+        else:
+            input_ids_tensor = torch.cat(
+                [
+                    torch.tensor([self.tokenizer.bos_token_id]),
+                    input_ids_tensor.flatten(),
+                ]
+            )
         # 先頭にBOSを追加するだけ？
         #print(f"new seq array={input_ids_tensor}")
         log_probs = [] 
@@ -339,7 +347,10 @@ Returns:
         # step, we need the `pdf` of the next token given all currently decompressed
         # tokens, but without a dummy token, the last `pdf` would be that of the last
         # already decompressed token. The value of the dummy token is irrelevant.
-        sequence_array = torch.tensor([self.tokenizer.bos_token_id], dtype=torch.int32)
+        if "qwen" in str(self.lm.__class__):
+            sequence_array = torch.tensor([151643], dtype=torch.int32)
+        else:
+            sequence_array = torch.tensor([self.tokenizer.bos_token_id], dtype=torch.int32)            
         # print("3 >> sequence_array.shape", sequence_array.shape)
         probs, past_key_values = self._next_token_probs(
             input_ids=sequence_array[None], 
