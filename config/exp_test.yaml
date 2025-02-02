@@ -1,0 +1,26 @@
+exp:
+    title: "jsai-exp-01"
+    llms: [
+          "rinna/gemma-2-baku-2b-it", # in llm-jp-bench
+          "llm-jp/llm-jp-3-1.8b-instruct",
+          "llm-jp/llm-jp-3-13b-instruct", 
+          "meta-llama/Llama-3.2-1B-Instruct",# in llm-jp-bench
+          "meta-llama/Llama-3.2-3B-Instruct",# in llm-jp-bench
+      "deepseek-ai/DeepSeek-V3",
+      "deepseek-ai/DeepSeek-V2",
+      "cyberagent/DeepSeek-R1-Distill-Qwen-32B-Japanese", # in
+      "cyberagent/DeepSeek-R1-Distill-Qwen-14B-Japanese", # in
+      "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", # in
+      "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B", #in
+      "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", #in
+      "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", #in-
+      "Qwen/Qwen2.5-0.5B-Instruct",#in
+      "Qwen/Qwen2.5-1.5B-Instruct",#in
+      "Qwen/Qwen2.5-3B-Instruct",#in
+      "Qwen/Qwen2.5-7B-Instruct",#in
+      "Qwen/Qwen2.5-14B-Instruct",#in
+      "TinySwallow-1.5B-Instruct",#in
+         ]
+    inputs: "../resume-data/doda-samples"
+    inputs_limit: 200
+    log_dir: "./exp_log"
