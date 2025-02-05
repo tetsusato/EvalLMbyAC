@@ -67,22 +67,6 @@ input_dir = "../resume-data/doda-samples"
 
 #accelerator = Accelerator()
 
-def execute_ae(
-                cache_val: bool,
-                input_dir: str,
-                text_path: str,
-                basic_info: str
-              ) -> pl.DataFrame:
-    if cache_val is None:
-        result_df = self.encode_decode_test(self.input_dir,
-                                            text_path,
-                                            basic_info,
-                                           )
-    else:
-
-        result_df = pl.DataFrame([cache_val])
-    return result_df    
-    
 if __name__ == "__main__":
 
     logger.info("START")
@@ -96,5 +80,5 @@ if __name__ == "__main__":
                         cfg,
                        )
     
-    executor.llm_models_test(execute_ae)
+    executor.llm_models_test(executer.execute_ae)
 
