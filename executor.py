@@ -101,10 +101,11 @@ class Executor:
                     
                     result_df = pl.DataFrame([cache_val])
                 """
-                result_df = func(self.input_dir,
-                                  text_path,
-                                  basic_info,
-                                  )
+                result_df = func(cache_val,
+                                 self.input_dir,
+                                 text_path,
+                                 basic_info,
+                                )
                 results_df = results_df.vstack(result_df)
 
                 

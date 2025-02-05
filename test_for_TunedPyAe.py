@@ -68,7 +68,7 @@ input_dir = "../resume-data/doda-samples"
 #accelerator = Accelerator()
 
 def execute_ae(
-                cache_val: boot,
+                cache_val: bool,
                 input_dir: str,
                 text_path: str,
                 basic_info: str
