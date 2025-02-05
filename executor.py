@@ -114,6 +114,21 @@ class Executor:
             exp_snap_save_path = f"summary/{self.exp_title}_{model_name_path}.parquet"
             results_df.write_parquet(exp_snap_save_path)
         
+    def execute_ae(self,
+                cache_val: boot,
+                input_dir: str,
+                text_path: str,
+                basic_info: str
+              ) -> pl.DataFrame:
+        if cache_val is None:
+            result_df = self.encode_decode_test(self.input_dir,
+                                                text_path,
+                                                basic_info,
+                                               )
+        else:
+
+            result_df = pl.DataFrame([cache_val])
+        return result_df    
 
                         
         
