@@ -10,6 +10,7 @@ from result import Result
 import time
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from typing import Callable
 
 from logging import config
 import logging
@@ -45,7 +46,14 @@ class Executor:
                            )
                            
     def llm_models_test(self,
-                        
+                        func: Callable[
+                                       [bool, # cache_val
+                                        str,  # input_dir
+                                        str,  # text_path
+                                        str,  # basic_info
+                                       ],
+                                       pl.DataFrame # result
+                                      ],
                         ):
 
         from result import Result
@@ -82,6 +90,8 @@ class Executor:
                 is_success = True
                 cache_key = f"{self.exp_title}-{model_name}-{text_path}"
                 cache_val = self.cache.get(cache_key)
+
+                """
                 if cache_val is None:
                     result_df = self.encode_decode_test(self.input_dir,
                                                         text_path,
@@ -90,7 +100,14 @@ class Executor:
                 else:
                     
                     result_df = pl.DataFrame([cache_val])
+                """
+                result_df = func(self.input_dir,
+                                  text_path,
+                                  basic_info,
+                                  )
                 results_df = results_df.vstack(result_df)
+
+                
             print(results_df)
 
             model_name_path = model_name.replace("/", "-")
