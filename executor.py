@@ -6,6 +6,7 @@ import os
 
 from pathlib import Path
 import polars as pl
+from perplexity import Perplexity
 from result import Result
 import time
 import transformers
@@ -44,21 +45,6 @@ class Executor:
         self.cache = Cache(cfg=cfg,
                            cache_filename=cache_filename,
                            )
-    def execute_ae(self,
-                    cache_val: bool,
-                    input_dir: str,
-                    text_path: str,
-                    basic_info: str
-                  ) -> pl.DataFrame:
-        if cache_val is None:
-            result_df = self.encode_decode_test(self.input_dir,
-                                                text_path,
-                                                basic_info,
-                                               )
-        else:
-
-            result_df = pl.DataFrame([cache_val])
-        return result_df    
                            
     def llm_models_test(self,
                         func: Callable[
@@ -73,6 +59,7 @@ class Executor:
 
         from result import Result
         results_df = pl.DataFrame(schema=Result.__annotations__)
+        func_name = func.__name__
         for model_name in self.model_list:
 
             model = AutoModelForCausalLM.from_pretrained(model_name,
@@ -103,7 +90,7 @@ class Executor:
 
                 basic_info = f"device={self.device}, cache={self.use_cache}, model={model_name}, text={text_path}"
                 is_success = True
-                cache_key = f"{self.exp_title}-{model_name}-{text_path}"
+                cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
                 cache_val = self.cache.get(cache_key)
 
                 """
@@ -120,6 +107,7 @@ class Executor:
                                  self.input_dir,
                                  text_path,
                                  basic_info,
+                                 func_name,
                                 )
                 results_df = results_df.vstack(result_df)
 
@@ -131,27 +119,91 @@ class Executor:
             results_df.write_parquet(exp_snap_save_path)
         
     def execute_ae(self,
-                cache_val: boot,
+                cache_val: bool,
                 input_dir: str,
                 text_path: str,
-                basic_info: str
+                basic_info: str,
+                func_name: str,
               ) -> pl.DataFrame:
         if cache_val is None:
-            result_df = self.encode_decode_test(self.input_dir,
+            result_df = self.encode_decode_test(input_dir,
                                                 text_path,
                                                 basic_info,
+                                                func_name=func_name,
                                                )
         else:
 
             result_df = pl.DataFrame([cache_val])
         return result_df    
 
-                        
+    def execute_ppl(self,
+                cache_val: bool,
+                input_dir: str,
+                text_path: str,
+                    basic_info: str,
+                    func_name: str,
+              ) -> pl.DataFrame:
+        if cache_val is None:
+            result_df = self.perplexity_test(input_dir,
+                                             text_path,
+                                             basic_info,
+                                             func_name=func_name
+                                            )
+        else:
+
+            result_df = pl.DataFrame([cache_val])
+        return result_df    
+
+
+    def perplexity_test(self,
+                           input_dir: str,
+                           text_path: str,
+                           basic_info: str,
+                        func_name: str,
+                           ):
+        
+        total_start = time.time()
+        perplexity = Perplexity(
+                                lm=self.model,
+                                tokenizer=self.tokenizer
+                               )
+        msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
+        msg_example = msg[0:40]
+        logger.info(f"file={text_path}, contents={msg_example}")
+        progress.info(f"file={text_path}, contents={msg_example}")
+        text_limit = 300
+        progress.info(f"[0] Encoding... `{msg[:text_limit]}`")
+        start = time.time()
+        score = perplexity.calculate(
+                           msg
+                          )
+        end = time.time()
+        encode_time = end-start
+        model_name = self.model.name_or_path
+        result = Result(
+                        self.exp_title,
+                        model_name,
+                        text_path,
+                        len(msg),
+                        None,
+                        None,
+                        score,
+                        encode_time,
+                        None,
+                        basic_info,
+                       )
+
+        cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+        self.cache.set(cache_key, result)
+
+        result_df = pl.DataFrame([result])
+        return result_df
         
     def encode_decode_test(self,
                            input_dir: str,
                            text_path: str,
                            basic_info: str,
+                           func_name: str,
                            ):
         total_start = time.time()
         coder = ArithmeticCoder(lm=self.model,
@@ -207,7 +259,7 @@ class Executor:
                         basic_info,
                        )
 
-        cache_key = f"{self.exp_title}-{model_name}-{text_path}"
+        cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
         self.cache.set(cache_key, result)
 
         result_df = pl.DataFrame([result])

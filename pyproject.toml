@@ -19,6 +19,7 @@ dependencies = [
     "quanto>=0.2.0",
     "scalene>=1.5.49",
     "torch>=2.5.1",
+    "torcheval>=0.0.7",
     "transformers>=4.46.3",
     "unidic-lite>=1.0.8",
 ]

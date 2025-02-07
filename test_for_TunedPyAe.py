@@ -80,5 +80,5 @@ if __name__ == "__main__":
                         cfg,
                        )
     
-    executor.llm_models_test(executer.execute_ae)
-
+    executor.llm_models_test(executor.execute_ppl)
+    executor.llm_models_test(executor.execute_ae)
