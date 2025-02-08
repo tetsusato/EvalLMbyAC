@@ -74,9 +74,9 @@ class Executor:
                         ):
 
         from result import Result
-        results_df = pl.DataFrame(schema=Result.__annotations__)
         func_name = func.__name__.split("_")[1] # assume "execute_hoge"
         for model_name in self.model_list:
+            results_df = pl.DataFrame(schema=Result.__annotations__)
 
             model = AutoModelForCausalLM.from_pretrained(model_name,
                                                   device_map="auto",
