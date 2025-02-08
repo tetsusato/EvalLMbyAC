@@ -36,7 +36,7 @@ class Perplexity():
             target_ids[:, :-trg_len] = -100
             with torch.no_grad():
                 outputs = self.model(current_input_ids.to(device),
-                                     device_map="auto",
+                                     #device_map="auto",
                                      use_cache=False,
                                      past_key_values=past_key_values
                                      )

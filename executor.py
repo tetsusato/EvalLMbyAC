@@ -3,11 +3,12 @@ from print_diff_hl import print_diff_hl, get_diff_hl
 from gptzip import ArithmeticCoder
 import omegaconf
 import os
-
+from hydra import compose, initialize
 from pathlib import Path
 import polars as pl
 from perplexity import Perplexity
 from result import Result
+import sys
 import time
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -45,7 +46,22 @@ class Executor:
         self.cache = Cache(cfg=cfg,
                            cache_filename=cache_filename,
                            )
-                           
+
+    # Done
+    """
+    def convert_with_func_name(self):
+        keysvals = self.cache.listKeysVals()
+        for key, val in keysvals:
+            #print(f"key={key}, val={val}")
+            print(f"key={key}, val={val.__class__}")
+            if key.endswith("txt-ae"): # new cache
+                print(f"{key} is already new one.")
+            else:
+                self.cache.delete(f"^{key}$")
+                new_key = f"{key}-ae"
+                self.cache.set(new_key, val)
+    """     
+        
     def llm_models_test(self,
                         func: Callable[
                                        [bool, # cache_val
@@ -59,7 +75,7 @@ class Executor:
 
         from result import Result
         results_df = pl.DataFrame(schema=Result.__annotations__)
-        func_name = func.__name__
+        func_name = func.__name__.split("_")[1] # assume "execute_hoge"
         for model_name in self.model_list:
 
             model = AutoModelForCausalLM.from_pretrained(model_name,
@@ -115,7 +131,7 @@ class Executor:
             print(results_df)
 
             model_name_path = model_name.replace("/", "-")
-            exp_snap_save_path = f"summary/{self.exp_title}_{model_name_path}.parquet"
+            exp_snap_save_path = f"summary/{self.exp_title}_{model_name_path}-{func_name}.parquet"
             results_df.write_parquet(exp_snap_save_path)
         
     def execute_ae(self,
@@ -197,6 +213,7 @@ class Executor:
         self.cache.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
+        print(result_df)
         return result_df
         
     def encode_decode_test(self,
@@ -285,4 +302,8 @@ class Executor:
     
 if __name__ == "__main__":
     print("exe")
-    exe = Executor()
+    with initialize(config_path="config", job_name=__file__):
+        cfg = compose(config_name=sys.argv[1], return_hydra_config=True)
+    exe = Executor(cfg)
+    
+    exe.convert_with_func_name()
