@@ -245,6 +245,7 @@ Returns:
         #                  )
         #max_cache_length = past_key_values.get_max_length()
 
+        logger.debug("Writing probs...")
         with open("log_probs.npy", "wb") as fp:
             for subsequence_length in tqdm.trange(len(input_ids_tensor), leave=False):
                 #logger.debug(f"input_ids={input_ids_tensor[None, : subsequence_length + 1]}")
@@ -264,6 +265,7 @@ Returns:
         
         #probs = np.vstack(log_probs)
 
+        logger.debug("Reading probs...")
         probs = []
         with open("log_probs.npy", "rb") as fp:
             for i in tqdm.trange(len(input_ids_tensor)):
