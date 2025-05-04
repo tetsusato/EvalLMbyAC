@@ -393,7 +393,7 @@ Returns:
             idx += 1
 
         # Remove the dummy token and convert to bytes.
-        print(f"Decoded {len(sequence_array)} tokens:", sequence_array)
+        progress.info(f"Decoded {len(sequence_array)} tokens:", sequence_array)
         decoded_string = self.tokenizer.decode(sequence_array,
                                                skip_special_tokens=skip_special_tokens)
         return decoded_string, is_success

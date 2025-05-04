@@ -1,0 +1,16 @@
+exp:
+    title: "fit2025-dev-01" # exp(実験)までもいかない開発状態
+    summary: "申込みのための最初の実験実装"
+    llm: "rinna/gemma-2-baku-2b-it"
+    input: "../resume-data/doda-samples/職務経歴書サンプル_ITエンジニア_ITコンサルタント.txt"
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: True
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "defaultCache"
+
+
