@@ -37,14 +37,20 @@ class ArithmeticCoder:
     ARITHMETIC_CODER_PRECISION = 32
     #ARITHMETIC_CODER_PRECISION = 56
 
-    def __init__(self, lm, tokenizer, use_cache = True):
+    def __init__(self,
+                 lm,
+                 tokenizer,
+                 use_cache = True, # KV Cache
+                 cache = None, # Global Cache Object
+                 ):
         #lm.forward = torch.compile(lm.forward, mode="reduce-overhead", fullgraph=True)
         self.lm = lm
         self.tokenizer = tokenizer
         self.use_cache = use_cache # cache past_key_values
         self.cache_size = 0 # cache size for past_key_values
         #self.cache = Cache("cache")
-        self.cache = None
+        #self.cache = None
+        self.cache = cache
     @property
     def _lm_device(self) -> torch.device:
         return next(self.lm.parameters()).device
@@ -213,7 +219,7 @@ Returns:
         logger.debug(f"encode start")
         input_ids_tensor = self.tokenizer(data, return_tensors='pt').input_ids
         #print(f"seq array.shape={input_ids_tensor.shape}") # (1, token数)
-        #print(f"tokens={input_ids_tensor[0].tolist()}")
+        logger.debug(f"tokens={input_ids_tensor[0].tolist()}")
         #print(f"tokens={self.tokenizer.convert_ids_to_tokens(input_ids_tensor[0].tolist())}")
         if "qwen" in str(self.lm.__class__) :
             input_ids_tensor = torch.cat(
@@ -245,41 +251,37 @@ Returns:
         #                  )
         #max_cache_length = past_key_values.get_max_length()
 
-        logger.debug("Writing probs...")
-        with open("log_probs.npy", "wb") as fp:
-            for subsequence_length in tqdm.trange(len(input_ids_tensor), leave=False):
-                #logger.debug(f"input_ids={input_ids_tensor[None, : subsequence_length + 1]}")
-                subsequence_probs, past_key_values = self._next_token_probs(
-                #subsequence_probs, past_key_values = self._next_token_probs_gemma(
-                    input_ids=input_ids_tensor[None, : subsequence_length + 1],
-                    past_key_values=past_key_values
-                )
-                #print(f"subsequence_probs={subsequence_probs}")
-                #print(f"past_key_values={past_key_values}")
-                #log_probs.append(subsequence_probs[0, -1])
-                np.save(fp, subsequence_probs[0, -1])
-                #print(f"log_probs={log_probs}, len={len(log_probs)}")
-                #print(f"probs={probs}, shape={probs.shape}")
-                logger.debug(f"past_key_values={past_key_values}")
-
-        
-        #probs = np.vstack(log_probs)
-
-        logger.debug("Reading probs...")
-        probs = []
-        with open("log_probs.npy", "rb") as fp:
-            for i in tqdm.trange(len(input_ids_tensor)):
-                subsequence_probs = np.load(fp)
-                probs.append(subsequence_probs)
-        probs = np.vstack(probs)
         output = list()
         encoder = Encoder(
             base=ArithmeticCoder.ARITHMETIC_CODER_BASE,
             precision=ArithmeticCoder.ARITHMETIC_CODER_PRECISION,
             output_fn=output.append,
         )
+
+        logger.debug("Writing probs...")
+        for subsequence_length in tqdm.trange(len(input_ids_tensor), leave=False):
+            #logger.debug(f"input_ids={input_ids_tensor[None, : subsequence_length + 1]}")
+            subsequence_probs, past_key_values = self._next_token_probs(
+            #subsequence_probs, past_key_values = self._next_token_probs_gemma(
+                input_ids=input_ids_tensor[None, : subsequence_length + 1],
+                past_key_values=past_key_values
+            )
+            logger.debug(f"subsequence_probs={subsequence_probs}({subsequence_probs.shape})")
+            #print(f"past_key_values={past_key_values}")
+            #log_probs.append(subsequence_probs[0, -1])
+            #print(f"log_probs={log_probs}, len={len(log_probs)}")
+            #print(f"probs={probs}, shape={probs.shape}")
+            logger.debug(f"past_key_values={past_key_values}")
+            if subsequence_length > 0: # BOSはスキップ
+                encoder.encode(normalize_pdf_for_arithmetic_coding(prev_probs),
+                               input_ids_tensor[subsequence_length],
+                               )
+            prev_probs = subsequence_probs
+        #probs = np.vstack(log_probs)
+
         #print(f"probs.shape={probs.shape}") # [token数, vocab数](numpy)
         #print(f"input_ids_tensor.shape={input_ids_tensor.shape}") # [token数]
+        """
         normalize_pdf_array =  joblib.Parallel(n_jobs=-1, prefer="threads")(
                                    joblib.delayed(normalize_pdf_for_arithmetic_coding)
                                    (probs[i,])
@@ -293,11 +295,12 @@ Returns:
             #print(f"symbol={symbol}")
             encoder.encode(pdf, symbol.item())
             #logger.debug(f"current output={output}")
+        """
         encoder.terminate()
 
-        logger.debug(f"output={output}, len={len(output)}")
+        logger.debug(f"output={output[:100]}, len={len(output)}")
         compressed_bits = ''.join(map(str, output))
-        logger.debug(f"output bits={compressed_bits}")
+        logger.debug(f"output bits={compressed_bits[:100]}")
         compressed_bytes, num_padded_bits = bits_to_bytes(compressed_bits)
 
         if return_num_padded_bits:

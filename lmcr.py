@@ -36,16 +36,19 @@ class LMCR:
         self.input = cfg.exp.input
         self.input_limit = cfg.exp.inputs_limit
         self.device: str = cfg.exp.device
-        self.use_cache: bool = cfg.exp.use_cache
+        self.use_cache: bool = cfg.exp.use_cache # Use KV Cache
         if not os.path.exists(self.top_log_dir):
             os.mkdir(self.top_log_dir)
         if not os.path.exists(self.exp_log_dir):
             os.mkdir(self.exp_log_dir)
 
-        cache_filename = f"{self.exp_title}.db"
-        self.cache = Cache(cfg=cfg,
-                           cache_filename=cache_filename,
-                           )
+        if cfg.cache.enable:
+            cache_filename = f"{self.exp_title}.db"
+            self.cache = Cache(cfg=cfg,
+                               cache_filename=cache_filename,
+                               )
+        else:
+            self.cache = None
 
     def input_analysis(self,
                         func: Callable[
@@ -68,9 +71,9 @@ class LMCR:
         model = AutoModelForCausalLM.from_pretrained(model_name,
                                               device_map="auto",
                                               #device_map=device,
-                                              #       local_files_only=True,
+                                              local_files_only=True,
                                               #device_map="cpu",
-                                              #trust_remote_code=True,
+                                              trust_remote_code=True,
                                               #torch_dtype=torch.float64
                                                torch_dtype="auto" # fujise method
                                               )
@@ -88,7 +91,7 @@ class LMCR:
 
         basic_info = f"device={self.device}, cache={self.use_cache}, model={model_name}, text={text_path}"
         is_success = True
-        if self.use_cache:
+        if self.cache:
             cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
             cache_val = self.cache.get(cache_key)
         else:
@@ -136,7 +139,8 @@ class LMCR:
                            ):
         coder = ArithmeticCoder(lm=self.model,
                                 tokenizer=self.tokenizer,
-                                use_cache=self.use_cache)
+                                use_cache=self.use_cache,
+                                cache=self.cache)
         msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
         msg_example = msg[0:40]
         logger.info(f"file={text_path}, contents={msg_example}")
@@ -186,8 +190,9 @@ class LMCR:
                         basic_info,
                        )
 
-        cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
-        self.cache.set(cache_key, result)
+        if self.cache:
+            cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+            self.cache.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
         print(result_df)
@@ -220,6 +225,7 @@ class LMCR:
         coder = ArithmeticCoder(lm=self.model,
                                 tokenizer=self.tokenizer,
                                 #use_cache=self.use_cache,
+                                cache=self.cache,
                                 )
         msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
         msg_example = msg[0:40]
@@ -265,17 +271,24 @@ class LMCR:
 
 if __name__ == "__main__":
     config = sys.argv[1]
-    override_options = sys.argv[2]
-    print(f"override_options={override_options}")
+    if len(sys.argv) >= 3:
+        override_options = sys.argv[2]
+        print(f"override_options={override_options}")
+    else:
+        override_options = None
     with initialize(config_path="config", job_name=__file__):
-        cfg = compose(config_name=sys.argv[1],
-                      return_hydra_config=True,
-                      overrides=[override_options],
-                      )
+        if override_options:
+            cfg = compose(config_name=sys.argv[1],
+                          return_hydra_config=True,
+                          overrides=[override_options],
+                          )
+        else:
+            cfg = compose(config_name=sys.argv[1],
+                          return_hydra_config=True,
+                          )
     exp_title=cfg.exp.title
     exp_summary=cfg.exp.summary
-    print(f"config={config} title={exp_title} summary={exp_summary}")
-    print(f"cfg={cfg}")
+    progress.info(f"config={config} title={exp_title} summary={exp_summary}")
     exe = LMCR(cfg)
     
     exe.input_analysis(exe.execute_ae)
