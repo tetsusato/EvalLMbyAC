@@ -69,6 +69,8 @@ class ArithmeticCoder:
             logger.debug(f"Cache key={key}, len(Cache key)={len(key)}")
             if val is not None:
                 logger.debug(f"Hit! Cache key={key}")
+            else:
+                logger.debug(f"Miss! Cache key={key}")
         logger.debug(f"past_key_values={past_key_values}")
         if past_key_values is not None:
             logger.debug(f"len(past_key_values.keys)={len(past_key_values.key_cache)}")
@@ -82,7 +84,7 @@ class ArithmeticCoder:
 
         #if val is None:
         #if True:
-        if self.cache is None:
+        if self.cache is None or val is None:
             if self.cache is not None:
                 logger.debug(f"Cache missed! key={key}")
             #if isinstance(past_key_values, DynamicCache):
