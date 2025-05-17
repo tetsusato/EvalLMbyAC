@@ -4,6 +4,7 @@ from gptzip import ArithmeticCoder
 import omegaconf
 import os
 from hydra import compose, initialize
+import mlflow
 from pathlib import Path
 import polars as pl
 from perplexity import Perplexity
@@ -21,6 +22,8 @@ config.fileConfig("logging.conf", disable_existing_loggers = False)
 logger = logging.getLogger(__name__)
 progress = logging.getLogger("progress")
 summary = logging.getLogger("summary")
+
+mlflow.set_tracking_uri(uri="http://localhost:8080")
 
 class LMCR:
     def __init__(self,
@@ -49,7 +52,32 @@ class LMCR:
                                )
         else:
             self.cache = None
+        mlflow.set_experiment(self.exp_title)
+        mlflow.log_params(cfg)
 
+    def get_cache_key(self,
+                      func, # assume "execute_hoge"
+                      ):
+        func_name = func.__name__.split("_")[1] # assume "execute_hoge"
+        cache_key = f"{self.exp_title}"\
+                   +f"-{self.model.name_or_path}"\
+                   +f"-{self.input}"\
+                   +f"-{func_name}"
+    def record_to_mlflow(self,
+                         results_df: pl.DataFrame,
+                         ):
+        logger = logging.getLogger("httpx")          
+        logger.setLevel(logging.ERROR)      
+        for row in results_df.iter_rows(named=True):
+            print(f"row={row}")
+            for key, value in row.items():
+                print(f"key={key}, value={value}")
+                import numbers
+                if isinstance(value, numbers.Number):
+                    mlflow.log_metric(key, value)
+                else:
+                    mlflow.set_tag(key, value)
+        
     def input_analysis(self,
                         func: Callable[
                                        [bool, # cache_val
@@ -91,19 +119,28 @@ class LMCR:
 
         basic_info = f"device={self.device}, cache={self.use_cache}, model={model_name}, text={text_path}"
         is_success = True
+        logger.debug(f"cache={self.cache}")
         if self.cache:
-            cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+            cache_key = self.get_cache_key(func)
             cache_val = self.cache.get(cache_key)
         else:
             cache_val = None
-        result_df = func(cache_val,
-                         self.input_dir,
-                         text_path,
-                         basic_info,
-                         func_name,
-                        )
+        if cache_val is None:
+            result_df = func(cache_val,
+                             self.input_dir,
+                             text_path,
+                             basic_info,
+                             func_name,
+                            )
+            if self.cache:
+                self.cache.set(cache_key,
+                               result_df,
+                               )
+        else:
+            result_df = cache_val
         results_df = results_df.vstack(result_df)
-                
+
+        self.record_to_mlflow(results_df)            
         progress.info(results_df)
         model_name_path = model_name.replace("/", "-")
         exp_snap_save_path = f"summary/{self.exp_title}_{model_name_path}-{func_name}.parquet"
@@ -126,6 +163,23 @@ class LMCR:
                                                 basic_info,
                                                 func_name=func_name,
                                                )
+        else:
+
+            result_df = pl.DataFrame([cache_val])
+        return result_df    
+    def execute_ppl(self,
+                cache_val: bool,
+                input_dir: str,
+                text_path: str,
+                    basic_info: str,
+                    func_name: str,
+              ) -> pl.DataFrame:
+        if cache_val is None:
+            result_df = self.perplexity_test(input_dir,
+                                             text_path,
+                                             basic_info,
+                                             func_name=func_name
+                                            )
         else:
 
             result_df = pl.DataFrame([cache_val])
@@ -215,6 +269,51 @@ class LMCR:
         del coder
         return result_df
 
+    def perplexity_test(self,
+                           input_dir: str,
+                           text_path: str,
+                           basic_info: str,
+                        func_name: str,
+                           ):
+        
+        total_start = time.time()
+        perplexity = Perplexity(
+                                lm=self.model,
+                                tokenizer=self.tokenizer
+                               )
+        msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
+        msg_example = msg[0:40]
+        logger.info(f"file={text_path}, contents={msg_example}")
+        progress.info(f"file={text_path}, contents={msg_example}")
+        text_limit = 300
+        progress.info(f"[0] Encoding... `{msg[:text_limit]}`")
+        start = time.time()
+        score = perplexity.calculate(
+                           msg
+                          )
+        end = time.time()
+        encode_time = end-start
+        model_name = self.model.name_or_path
+        result = Result(
+                        self.exp_title,
+                        model_name,
+                        text_path,
+                        len(msg),
+                        None,
+                        None,
+                        score,
+                        encode_time,
+                        None,
+                        basic_info,
+                       )
+
+        cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+        self.cache.set(cache_key, result)
+
+        result_df = pl.DataFrame([result])
+        print(result_df)
+        return result_df
+
     def encoding(self,
                  input_dir: str,
                  text_path: str,
@@ -292,3 +391,4 @@ if __name__ == "__main__":
     exe = LMCR(cfg)
     
     exe.input_analysis(exe.execute_ae)
+    exe.input_analysis(exe.execute_ppl)
