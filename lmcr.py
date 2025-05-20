@@ -63,39 +63,46 @@ class LMCR:
                    +f"-{self.model.name_or_path}"\
                    +f"-{self.input}"\
                    +f"-{func_name}"
+        return cache_key
+    
     def record_to_mlflow(self,
                          results_df: pl.DataFrame,
                          ):
         logger = logging.getLogger("httpx")          
         logger.setLevel(logging.ERROR)      
         for row in results_df.iter_rows(named=True):
-            print(f"row={row}")
+            logger.info(f"row={row}")
             for key, value in row.items():
-                print(f"key={key}, value={value}")
+                logger.info(f"key={key}, value={value}")
                 import numbers
                 if isinstance(value, numbers.Number):
                     mlflow.log_metric(key, value)
                 else:
                     mlflow.set_tag(key, value)
-        
-    def input_analysis(self,
-                        func: Callable[
-                                       [bool, # cache_val
-                                        str,  # input_dir
-                                        str,  # text_path
-                                        str,  # basic_info
-                                        str,  # func_name
-                                       ],
-                                       pl.DataFrame # result
-                                      ],
+
+    def generating_test(self,
                         ):
-
-        start = time.time()
-        from result import Result
-        func_name = func.__name__.split("_")[1] # assume "execute_hoge"
-        model_name = self.llm
-        results_df = pl.DataFrame(schema=Result.__annotations__)
-
+        messages = [
+            {"role": "system", "content": "あなたは日本文化に詳しいAIアシスタントです"},
+            {"role": "user", "content": "吾輩は，に続く文章を生成して下さい"},
+          ]
+        prompt = self.tokenizer.apply_chat_template(messages,
+                                                    tokenize=False,
+                                                    add_generation_prompt=True,
+                                                    )
+        print(f"prompt={prompt}")
+        chat_input = self.tokenizer(prompt,
+                                    return_tensors="pt",
+                                    return_token_type_ids=False,
+                                    ).to(self.model.device)
+        print(f"chat_input={chat_input}")
+        chat_outputs = self.model.generate(**chat_input, max_new_tokens=50)
+        output_text = chat_outputs[0][chat_input["input_ids"].shape[-1]:]
+        response = self.tokenizer.decode(output_text, skip_special_tokens=True)
+        print("\nAssistant Response:", response)
+    def prepare_llm(self,
+                    model_name: str,
+                    ):
         model = AutoModelForCausalLM.from_pretrained(model_name,
                                               device_map="auto",
                                               #device_map=device,
@@ -114,29 +121,62 @@ class LMCR:
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer = tokenizer
+        
+    def input_analysis(self,
+                        func: Callable[
+                                       [bool, # cache_val
+                                        str,  # input_dir
+                                        str,  # text_path
+                                        str,  # basic_info
+                                        str,  # func_name
+                                       ],
+                                       pl.DataFrame # result
+                                      ],
+                        ):
+
+        start = time.time()
+        from result import Result
+        func_name = func.__name__.split("_")[1] # assume "execute_hoge"
+        model_name = self.llm
+        logger.info(f"model={model_name}")
+
+        self.prepare_llm(model_name)
+        
+        results_df = pl.DataFrame(schema=Result.__annotations__)
+
 
         text_path = self.input
 
         basic_info = f"device={self.device}, cache={self.use_cache}, model={model_name}, text={text_path}"
         is_success = True
         logger.debug(f"cache={self.cache}")
-        if self.cache:
+        logger.debug(f"basic_info={basic_info}")
+        if self.cache is not None:
             cache_key = self.get_cache_key(func)
-            cache_val = self.cache.get(cache_key)
+            logger.debug(f"cache key={cache_key}")
+            if cache_key is not None:
+                logger.debug("cache key found")
+                cache_val = self.cache.get(cache_key)
+            else:
+                # 通条，ここは通らないはず
+                logger.debug("cache key not found")
+                cache_val = None
         else:
             cache_val = None
         if cache_val is None:
+            logger.debug("cache val not found. execute func..")
             result_df = func(cache_val,
                              self.input_dir,
                              text_path,
                              basic_info,
                              func_name,
                             )
-            if self.cache:
+            if self.cache is not None:
                 self.cache.set(cache_key,
                                result_df,
                                )
         else:
+            logger.debug("cache val found.")
             result_df = cache_val
         results_df = results_df.vstack(result_df)
 
@@ -371,7 +411,7 @@ class LMCR:
 if __name__ == "__main__":
     config = sys.argv[1]
     if len(sys.argv) >= 3:
-        override_options = sys.argv[2]
+        override_options = sys.argv[2:]
         print(f"override_options={override_options}")
     else:
         override_options = None
@@ -379,7 +419,7 @@ if __name__ == "__main__":
         if override_options:
             cfg = compose(config_name=sys.argv[1],
                           return_hydra_config=True,
-                          overrides=[override_options],
+                          overrides=override_options,
                           )
         else:
             cfg = compose(config_name=sys.argv[1],
@@ -388,7 +428,10 @@ if __name__ == "__main__":
     exp_title=cfg.exp.title
     exp_summary=cfg.exp.summary
     progress.info(f"config={config} title={exp_title} summary={exp_summary}")
+    progress.info(f"cfg={cfg}")
     exe = LMCR(cfg)
     
     exe.input_analysis(exe.execute_ae)
     exe.input_analysis(exe.execute_ppl)
+    exe.generating_test()
+    
