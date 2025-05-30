@@ -17,7 +17,7 @@ class Result():
     original_size: int
     compressed_size: int
     decoded_size: int
-    compression_rate: float
+    llm_score: float
     encode_time: int
     decode_time: int
     experiment_environment: str
@@ -32,7 +32,7 @@ class Result():
             self.original_size,
             self.compressed_size,
             self.decoded_size,
-            self.compression_rate,
+            self.llm_score,
             self.encode_time,
             self.decode_time,
             ]
@@ -49,7 +49,7 @@ class Result():
         #summary += f"success?={is_success}" + crlf
         summary += f"Experiment: {self.exp_title}" + crlf
         summary += f"Compression {self.original_size} bytes to {self.compressed_size} bytes" + crlf
-        summary += f"Compression ratio {self.compression_rate}" + crlf
+        summary += f"Compression ratio {self.llm_score}" + crlf
         summary += f"DeCompression {self.compressed_size} bytes to {self.decoded_size} bytes" + crlf
         summary += f"env: {self.experiment_environment}" + crlf
         summary += f"total time elapsed: {self.encode_time+self.decode_time}" + crlf

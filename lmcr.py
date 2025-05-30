@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 progress = logging.getLogger("progress")
 summary = logging.getLogger("summary")
 
-mlflow.set_tracking_uri(uri="http://localhost:8080")
 
 class LMCR:
     def __init__(self,
@@ -52,7 +51,6 @@ class LMCR:
                                )
         else:
             self.cache = None
-        mlflow.set_experiment(self.exp_title)
         mlflow.log_params(cfg)
 
     def get_cache_key(self,
@@ -68,8 +66,8 @@ class LMCR:
     def record_to_mlflow(self,
                          results_df: pl.DataFrame,
                          ):
-        logger = logging.getLogger("httpx")          
-        logger.setLevel(logging.ERROR)      
+        #logger = logging.getLogger("httpx")          
+        #logger.setLevel(logging.ERROR)      
         for row in results_df.iter_rows(named=True):
             logger.info(f"row={row}")
             for key, value in row.items():
@@ -80,6 +78,35 @@ class LMCR:
                 else:
                     mlflow.set_tag(key, value)
 
+    def calculate_token_efficiency(self,
+                                   ) -> float:
+        input_dir = self.input_dir
+        text_path = self.input
+        print(f"dir={input_dir}")
+        print(f"text_path={text_path}")
+        msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
+        print(f"msg len={len(msg)}")
+        print(f"msg examples={msg[:40]}")
+        print(f"msg examples len={len(msg[:40])}")        
+        input_ids_tensor = self.tokenizer(msg, return_tensors='pt').input_ids
+        print(f"input_ids_tensor examples={input_ids_tensor[-1, :40]}")
+        decoded = self.tokenizer.decode(input_ids_tensor[-1, :40],
+                                        clean_up_tokenization_spaces=False,
+                                        )
+        print(f"decoded examples={decoded}")
+        decoded = self.tokenizer.convert_ids_to_tokens(input_ids_tensor[-1, :40],
+                                        )
+        print(f"decoded examples2={decoded}")
+        print(f"tokenized examples={input_ids_tensor[-1, :40]}")
+        
+        print(f"tokenized msg len={len(input_ids_tensor[-1])}")
+        input_len = len(msg)
+        tokens_len = len(input_ids_tensor[-1])
+        ratio = tokens_len / input_len
+        print(f"ratio={ratio}")
+        mlflow.log_metric("token efficiency", ratio)
+        return ratio
+        
     def generating_test(self,
                         ):
         messages = [
@@ -100,6 +127,10 @@ class LMCR:
         output_text = chat_outputs[0][chat_input["input_ids"].shape[-1]:]
         response = self.tokenizer.decode(output_text, skip_special_tokens=True)
         print("\nAssistant Response:", response)
+        mlflow.set_tag("response", response)
+
+
+        
     def prepare_llm(self,
                     model_name: str,
                     ):
@@ -171,6 +202,7 @@ class LMCR:
                              basic_info,
                              func_name,
                             )
+            logger.debug(f"result_df={result_df}")
             if self.cache is not None:
                 self.cache.set(cache_key,
                                result_df,
@@ -269,10 +301,12 @@ class LMCR:
             is_success=False
 
         ratio = len(code)/len(msg)
+        logger.info(f"LMCR: {len(code)}/{len(msg)}={ratio}")
 
         model_name = self.model.name_or_path
+        title = f"{self.exp_title}(ae)"
         result = Result(
-                        self.exp_title,
+                        title,
                         model_name,
                         text_path,
                         len(msg),
@@ -284,12 +318,12 @@ class LMCR:
                         basic_info,
                        )
 
-        if self.cache:
+        if self.cache is not None:
             cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
             self.cache.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
-        print(result_df)
+        logger.info(f"result_df={result_df}")
         logger.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
         progress.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
         logger.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes.({basic_info})")
@@ -334,8 +368,9 @@ class LMCR:
         end = time.time()
         encode_time = end-start
         model_name = self.model.name_or_path
+        title = f"{self.exp_title}(ppl)"
         result = Result(
-                        self.exp_title,
+                        title,
                         model_name,
                         text_path,
                         len(msg),
@@ -347,8 +382,9 @@ class LMCR:
                         basic_info,
                        )
 
-        cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
-        self.cache.set(cache_key, result)
+        if self.cache is not None:
+            cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+            self.cache.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
         print(result_df)
@@ -430,8 +466,20 @@ if __name__ == "__main__":
     progress.info(f"config={config} title={exp_title} summary={exp_summary}")
     progress.info(f"cfg={cfg}")
     exe = LMCR(cfg)
-    
-    exe.input_analysis(exe.execute_ae)
-    exe.input_analysis(exe.execute_ppl)
-    exe.generating_test()
-    
+    run_name = f"{exp_title}(ae)"
+    mlflow.end_run()
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.set_tracking_uri(uri="http://localhost:8080")
+        mlflow.set_tag("algorithm", "ae")
+        exe.input_analysis(exe.execute_ae)
+        exe.calculate_token_efficiency()    
+        exe.generating_test()
+    mlflow.end_run()
+    run_name = f"{exp_title}(ppl)"
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.set_tracking_uri(uri="http://localhost:8080")
+        mlflow.set_tag("algorithm", "ppl")
+        exe.input_analysis(exe.execute_ppl)
+        exe.calculate_token_efficiency()    
+        exe.generating_test()
+    mlflow.end_run()
