@@ -9,6 +9,7 @@ import os
 import pickle
 import torch
 import tqdm
+from vllm import LLM, SamplingParams
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, cache_utils, HybridCache, StaticCache
 
@@ -42,12 +43,15 @@ class ArithmeticCoder:
                  tokenizer,
                  use_cache = True, # KV Cache
                  cache = None, # Global Cache Object
+                 model_huggingface_id = None,
                  ):
         #lm.forward = torch.compile(lm.forward, mode="reduce-overhead", fullgraph=True)
         self.lm = lm
         self.tokenizer = tokenizer
         self.use_cache = use_cache # cache past_key_values
         self.cache_size = 0 # cache size for past_key_values
+        model_name = self.lm.name_or_path
+        self.model_name = model_name
         #self.cache = Cache("cache")
         #self.cache = None
         self.cache = cache
@@ -108,7 +112,7 @@ class ArithmeticCoder:
                 input_ids = input_ids[:, kv_cache_seq_length:]
 
             assert len(input_ids.shape) == 2, f"can't get probs for input_ids shape {input_ids.shape}"
-            logger.debug(f"lm_device={self._lm_device}")
+            #logger.debug(f"lm_device={self._lm_device}")
             logger.debug(f"input past_key_values={past_key_values}({past_key_values.__class__})")
             logger.debug(f"input past_key_values.seq_len={past_key_values.get_seq_length()}")
             logger.debug(f"use_cache={self.use_cache}")
@@ -125,28 +129,10 @@ class ArithmeticCoder:
                     use_cache=self.use_cache,
                     #cache_implementation="dynamic"
                 )
-            logger.debug(f"output past_key_values={output.past_key_values}({output.past_key_values.__class__})")
             logger.debug(f"logits.shape={output.logits.shape}")
-            #probs = output.logits.to(torch.float32).softmax(dim=-1)
-            probs = output.logits.to(torch.float64).softmax(dim=-1)
-            #return (probs.cpu().numpy(), output.past_key_values)
+            logger.debug(f"output past_key_values={output.past_key_values}({output.past_key_values.__class__})")
             logger.debug(f"returned past_key_values [0][0].shape[2]={output.past_key_values[0][0].shape[2]}")
-            """
-            logger.debug(f"len(returned past_key_values)={len(output.past_key_values)}")
-            logger.debug(f"returned past_key_values[0]={output.past_key_values[0]}")
-            logger.debug(f"returned past_key_values[0][0]={output.past_key_values[0][0]}")
-            logger.debug(f"returned past_key_values[0][0].shape={output.past_key_values[0][0].shape}")
-            #logger.debug(f"returned past_key_values[0].shape={output.past_key_values[0].shape}")
-            logger.debug(f"returned past_key_values[1]={output.past_key_values[1]}")
-            logger.debug(f"returned past_key_values[1][0]={output.past_key_values[1][0]}")
-            logger.debug(f"returned past_key_values[1][0].shape={output.past_key_values[1][0].shape}")
-            logger.debug(f"returned past_key_values[1][1]={output.past_key_values[1][1]}")
-            logger.debug(f"returned past_key_values[1][1].shape={output.past_key_values[1][1].shape}")
-            logger.debug(f"returned past_key_values[2]={output.past_key_values[2]}")
-            logger.debug(f"returned past_key_values[2][0]={output.past_key_values[2][0]}")
-            logger.debug(f"returned past_key_values[2][0].shape={output.past_key_values[2][0].shape}")
-            logger.debug(f"returned past_key_values[3].shape={output.past_key_values[3].shape}")
-            """
+            probs = output.logits.to(torch.float64).softmax(dim=-1)
             probs = probs.cpu().numpy()
             #past_key_values = DynamicCache.from_legacy_cache(output.past_key_values)
             past_key_values = output.past_key_values
@@ -223,20 +209,15 @@ Returns:
         #print(f"seq array.shape={input_ids_tensor.shape}") # (1, token数)
         logger.debug(f"tokens={input_ids_tensor[0].tolist()}")
         #print(f"tokens={self.tokenizer.convert_ids_to_tokens(input_ids_tensor[0].tolist())}")
-        if "qwen" in str(self.lm.__class__) :
-            input_ids_tensor = torch.cat(
-                [
-                    torch.tensor([151643]), # <|endoftext|>
-                    input_ids_tensor.flatten(),
-                ]
-            )
-        else:
-            input_ids_tensor = torch.cat(
-                [
-                    torch.tensor([self.tokenizer.bos_token_id]),
-                    input_ids_tensor.flatten(),
-                ]
-            )
+        bos_token_id = self.get_bos_token_id()
+        progress.info(f"tokenizer={self.tokenizer}")
+        progress.info(f"bos_token_id={bos_token_id}")
+        input_ids_tensor = torch.cat(
+            [
+                torch.tensor([bos_token_id]),
+                input_ids_tensor.flatten(),
+            ]
+        )
         # 先頭にBOSを追加するだけ？
         #print(f"new seq array={input_ids_tensor}")
         log_probs = [] 
@@ -261,20 +242,29 @@ Returns:
         )
 
         logger.debug("Writing probs...")
+        progress.info(f"################# encode start! for {input_ids_tensor}")
+        decoded = [self.tokenizer.decode(input_id,
+                                        clean_up_tokenization_spaces=False,
+                                         )
+                   for input_id in input_ids_tensor]
+        progress.info(f"decoded={decoded}(tokenizer.decode)")
+        
         for subsequence_length in tqdm.trange(len(input_ids_tensor), leave=False):
+            progress.info(f"current length={subsequence_length}")
             #logger.debug(f"input_ids={input_ids_tensor[None, : subsequence_length + 1]}")
             subsequence_probs, past_key_values = self._next_token_probs(
             #subsequence_probs, past_key_values = self._next_token_probs_gemma(
                 input_ids=input_ids_tensor[None, : subsequence_length + 1],
                 past_key_values=past_key_values
             )
-            logger.debug(f"subsequence_probs={subsequence_probs}({subsequence_probs.shape})")
+            #progress.info(f"subsequence_probs={subsequence_probs}({subsequence_probs.shape})")
             #print(f"past_key_values={past_key_values}")
             #log_probs.append(subsequence_probs[0, -1])
             #print(f"log_probs={log_probs}, len={len(log_probs)}")
             #print(f"probs={probs}, shape={probs.shape}")
             logger.debug(f"past_key_values={past_key_values}")
             if subsequence_length > 0: # BOSはスキップ
+                progress.info(f"prev_probs={prev_probs}")
                 encoder.encode(normalize_pdf_for_arithmetic_coding(prev_probs),
                                input_ids_tensor[subsequence_length],
                                )
@@ -354,10 +344,9 @@ Returns:
         # step, we need the `pdf` of the next token given all currently decompressed
         # tokens, but without a dummy token, the last `pdf` would be that of the last
         # already decompressed token. The value of the dummy token is irrelevant.
-        if "qwen" in str(self.lm.__class__):
-            sequence_array = torch.tensor([151643], dtype=torch.int32)
-        else:
-            sequence_array = torch.tensor([self.tokenizer.bos_token_id], dtype=torch.int32)            
+        progress.info(f"lm.__class__={self.lm.__class__}")
+        bos_token_id = self.get_bos_token_id()
+        sequence_array = torch.tensor([bos_token_id], dtype=torch.int32)            
         # print("3 >> sequence_array.shape", sequence_array.shape)
         probs, past_key_values = self._next_token_probs(
             input_ids=sequence_array[None], 
@@ -402,6 +391,21 @@ Returns:
         decoded_string = self.tokenizer.decode(sequence_array,
                                                skip_special_tokens=skip_special_tokens)
         return decoded_string, is_success
+    def get_bos_token_id(self):
+        progress.info(f"lm={self.lm.__class__}")
+        progress.info(f"lm name={self.model_name}")
+        #if "qwen" in str(self.lm.__class__):
+        if "Qwen" in self.model_name:
+            bos_token_id = 151643
+            progress.info(f"bos_token_id in Qwen={bos_token_id}")
+        #elif "Falcon" in str(self.lm.__class__):
+        elif "Falcon" in self.model_name:
+            bos_token_id = self.tokenizer('<|startoftext|>', return_tensors='pt').input_ids
+            progress.info(f"bos_token_id in Falcon={bos_token_id}")
+        else:
+            bos_token_id = self.tokenizer.bos_token_id
+            progress.info(f"bos_token_id in general={bos_token_id}")
+        return bos_token_id
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -431,3 +435,4 @@ There was nothing so very remarkable in that; nor did Alice think it so very muc
     print("\n" * 5)
     decoded_string = coder.decode(code, num_padded_bits=num_padded_bits)
     print(f"[2] Decoded: {decoded_string}")
+

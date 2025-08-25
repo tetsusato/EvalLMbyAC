@@ -3,6 +3,13 @@ from torcheval.metrics.functional import perplexity
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers.cache_utils import DynamicCache
 
+from logging import config
+import logging
+config.fileConfig("logging.conf", disable_existing_loggers = False)
+
+logger = logging.getLogger(__name__)
+progress = logging.getLogger("progress")
+
 class Perplexity():
     def __init__(self,
                  lm: AutoModelForCausalLM,
@@ -35,9 +42,15 @@ class Perplexity():
             target_ids = current_input_ids.clone()
             target_ids[:, :-trg_len] = -100
             with torch.no_grad():
-                outputs = self.model(current_input_ids.to(device),
+                #for parameter in self.model.parameters():
+                #    progress.info(f"parameter={parameter}")
+                model_device = next(self.model.parameters()).device
+                progress.info(f"model_device={model_device}")
+                progress.info(f"input_ids={current_input_ids}({current_input_ids.device})")
+                outputs = self.model(current_input_ids.to(model_device),
+                                     #current_input_ids,
                                      #device_map="auto",
-                                     use_cache=False,
+                                     use_cache=True,
                                      past_key_values=past_key_values
                                      )
                 past_key_values = outputs.past_key_values

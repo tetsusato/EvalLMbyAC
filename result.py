@@ -12,6 +12,7 @@ class Test():
 @dataclass
 class Result():
     exp_title: str
+    hosting: str
     model_name: str
     input_file_name: str
     original_size: int

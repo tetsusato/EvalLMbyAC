@@ -214,30 +214,35 @@ class _CoderBase:
 
     encoding = symbol is not None
     intervals = self._get_intervals(pdf)
+    print(f"{pdf}({pdf.shape})を受け取っているが，結局使うのは{intervals}({intervals.shape})だけ")
     if not encoding: # decoding
       #logger.debug(f"intervals={intervals}")
       #logger.debug(f"_code={self._code}")
       symbol = np.searchsorted(intervals, self._code, side="right") - 1
     #logger.debug(f"symbol={symbol}")
     assert 0 <= symbol < pdf.size
+    progress.info(f"current symbol={symbol}")
     low_pre_split = self._low
     self._low, self._high = intervals[[symbol, symbol + 1]]
     # Due to integer arithmetics the integer representation of [low, high) has
     # an inclusive upper bound, so decrease high.
     self._high -= 1
     assert 0 <= self._low <= self._high < self._base_to_pm1 * self._base
+    progress.info(f"initial: (low, high) = ({self._low}, {self._high})")
 
     # Normalize the AC state.
     self._remove_matching_digits(low_pre_split=low_pre_split, encoding=encoding)
     assert 0 <= self._low <= self._high < self._base_to_pm1 * self._base
     assert encoding or self._low <= self._code <= self._high
     assert self._low // self._base_to_pm1 != self._high // self._base_to_pm1
+    progress.info(f"remove matching digits: (low, high) = ({self._low}, {self._high})")
 
     self._remove_carry_digits(encoding=encoding)
     assert 0 <= self._low <= self._high < self._base_to_pm1 * self._base
     assert encoding or self._low <= self._code <= self._high
     assert self._high - self._low > self._base_to_pm2
-
+    progress.info(f"remove carry digits: (low, high) = ({self._low}, {self._high})")
+    
     return symbol
 
   @classmethod

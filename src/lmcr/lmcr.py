@@ -1,4 +1,4 @@
-from cache.cache import Cache
+from src.cache.cache import Cache
 from print_diff_hl import print_diff_hl, get_diff_hl
 #from gptzip import ArithmeticCoder
 import omegaconf
