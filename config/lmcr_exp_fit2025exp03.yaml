@@ -1,0 +1,17 @@
+exp:
+    title: "fit2025-paper-03"
+    summary: "相関分析のデータ取り直し"
+    llm: "google/gemma-1.1-7b-it"
+    input: "test-input-data/minimum.txt"
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "fit2025"
+
+

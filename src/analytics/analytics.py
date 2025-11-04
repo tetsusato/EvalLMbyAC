@@ -258,51 +258,33 @@ class Analyzer:
 
     def get_modified_llm_score(self,
                                df):
+        # これがLate-stage LMCRのはず
         original_size = df["metrics.original_size"].item()
         tokenized_size = df["metrics.tokenized_size"].item()
         encoded_size = df["metrics.compressed_size"].item()
         score = encoded_size/tokenized_size
         return score
 
-    """
-    def get_poly_interpolated_parameter(self,
-                                        df):
-        # 入力は圧縮率とトーン効率
-        cs_col = pl.col("metrics.compressed_size")
-        ts_col = pl.col("metrics.tokenized_size")
-        size_col = pl.col("metrics.original_size")
-        X = df.select((cs_col/size_col).alias("compression_ratio"),
-                      (ts_col/size_col).alias("tokenized_ratio"),
-                      )
-        poly_extractor = PolynomialFeatures(degree=2, include_bias=True)
-        X_poly = poly_extractor.fit_transform(X)
-        
+    def get_complex_llm_score(self,
+                               df):
+        original_size = df["metrics.original_size"].item()
+        tokenized_size = df["metrics.tokenized_size"].item()
+        encoded_size = df["metrics.compressed_size"].item()
+        token_efficiency = tokenized_size/original_size
+
+        # metrics.compressed_sizeはplot_leaderboard_comprex_lmcrで改ざんされてる
+        score = encoded_size/original_size
+        return score
         
     def get_poly_interpolated_llm_score(self,
                                df):
-        # 入力は圧縮率とトーン効率
-        cs_col = pl.col("metrics.compressed_size")
-        ts_col = pl.col("metrics.tokenized_size")
-        size_col = pl.col("metrics.original_size")
-        X = df.select((cs_col/size_col).alias("compression_ratio"),
-                      (ts_col/size_col).alias("tokenized_ratio"),
-                      )
-        poly_extractor = PolynomialFeatures(degree=2, include_bias=True)
-        X_poly = poly_extractor.fit_transform(X)
 
-        score_col = pl.col("AVG")
-        Y = df.select(score_col)
-        linear_model = LinearRegression()
-        linear_model.fit(X_poly, Y)
-
-        # 本来ならこれで全部の計算が終わるのだが，今のx_func/y_funcの実装は
-        # プロット１点ごとに処理する実装なので
-        score = linear_model.predict(X_poly)
-        score = score.item()
+        # 2次回帰予測値
+        score = df["interpolated_llm_score"].item()
 
         return score
 
-    """
+
     def get_token_efficiency(self,
                              df):
         return df["metrics.token_efficiency"].item()
@@ -492,6 +474,60 @@ class Analyzer:
                                   title=f"Leaderboard Score vs Late-stage LMCR Index({lang})"
                                                                     )
             corr_list.append(corr_list_result)  
+    def plot_leaderboard_complex_lmcr(self,
+                                       df,
+                                       algorithm,
+                                       lang,
+                                       ):
+        cs_col = pl.col("metrics.compressed_size")
+        ts_col = pl.col("metrics.tokenized_size")
+        size_col = pl.col("metrics.original_size")
+        X = df.select((cs_col/size_col).alias("compression_ratio"),
+                      (ts_col/size_col).alias("tokenized_ratio"),
+                      ) # shape(N, 2)
+
+        from scipy.stats import mode
+        #mode_val = mode(X["tokenized_ratio"], keepdims=False).mode
+        #shift = 1 - mode_val
+        mean_val = X.select(pl.mean("tokenized_ratio")).item()
+
+        # 平均値・最頻値の値からのずれ
+        shift = X["tokenized_ratio"] - mean_val
+        #weight = np.exp(-2.0*shift) # corr=-0.74
+        weight = np.exp(-3.0*shift) # corr=-0.75
+        #weight = np.exp(-4.0*shift) # corr=-0.75
+        #weight = np.exp(-8.0*shift) # corr=-0.58
+
+        # 平均値・最頻値の値を1.0とする
+        centered = shift * weight + 1.0
+        # トークン効率の悪いFalconなんかは0.8とかになって，
+        # トークン効率の良いllm-jpは1.2とかになるはず
+
+        transformed = 2 - centered
+
+        # 改ざん
+        df = df.with_columns([
+               (cs_col * transformed).alias("metrics.compressed_size")
+            ])
+
+        corr_list = []
+        for input_length, length_df in df.group_by("metrics.original_size"):
+            print(f"input_length={input_length}")
+            #print(f"length_df={length_df}")
+            # input_lengthはtupleなのでスカラー値として取り出す
+            y_title = f"Complex LMCR Index(input={int(input_length[0])} characters)"
+            corr_list_result = self.plot_leaderboard_score_score_by_model(
+                                  length_df, 
+                                  algorithm, 
+                                  #option=input_length,
+                                  option=None,
+                                  x_func=self.get_leaderboard_score,
+                                  y_func=self.get_complex_llm_score,
+                                  x_title="Leaderboard Score",
+                                  y_title=y_title,
+                                  title=f"Leaderboard Score vs Complex LMCR Index({lang})"
+                                                                    )
+            corr_list.append(corr_list_result)  
 
     def plot_leaderboard_token_efficiency(self,
                                           df,
@@ -539,30 +575,113 @@ class Analyzer:
                                                                     )
             corr_list.append(corr_list_result)
 
-    """
-    def plot_poly_interpolated_lmcr_score(self,
+    def plot_leaderboard_2vars_linearregression(self,
                                    df,
                                    algorithm,
                                    lang,
                                    ):
+        # 入力が２変数で線形回帰するやつ
+        # 入力は圧縮率とトーン効率
+        cs_col = pl.col("metrics.compressed_size")
+        ts_col = pl.col("metrics.tokenized_size")
+        size_col = pl.col("metrics.original_size")
+        X = df.select((cs_col/size_col).alias("compression_ratio"),
+                      (ts_col/size_col).alias("tokenized_ratio"),
+                      ) # shape(N, 2)
+        #from sklearn.preprocessing import PolynomialFeatures
+        #poly_extractor = PolynomialFeatures(degree=2, include_bias=True)
+        #X_poly = poly_extractor.fit_transform(X) # shape(N, 6)
+
+        score_col = pl.col("AVG")
+        Y = df.select(score_col)
+        from sklearn.linear_model import LinearRegression
+        linear_model = LinearRegression()
+        #linear_model.fit(X_poly, Y)
+        linear_model.fit(X, Y) # 回帰モデル生成
+
+
         corr_list = []
         for input_length, length_df in df.group_by("metrics.original_size"):
             print(f"input_length={input_length}")
+            # Xと違ってxは１行の想定
+            x = df.select((cs_col/size_col).alias("compression_ratio"),
+                      (ts_col/size_col).alias("tokenized_ratio"),
+                      ) # shape(1, 2)
+            assert x.shape[0] == 1 # assertなど入れてみる
+            # nはモデル数
+            y_pred = linear_model.predict(x) # (n, 1)
+            length_df = length_df.with_columns([
+                    pl.Series("interpolated_llm_score", y.reshape(-1))
+                ]
+                )
+            
             #print(f"length_df={length_df}")
-            y_title = f"LMCR Index(input={int(input_length[0])} characters)"
+            y_title = f"Linear Regression AVG Score(input={int(input_length[0])} characters)"
             corr_list_result = self.plot_leaderboard_score_score_by_model(
                                       length_df, 
                                       algorithm, 
                                       #option=input_length,
                                       option=None,
-                                      x_func=self.get_llm_score,
-                                      y_func=self.get_token_efficiency,
-                                      x_title="LMCR Index",
+                                      x_func=self.get_leaderboard_score,
+                                      y_func=self.get_poly_interpolated_llm_score,
+                                      x_title="Leaderboard AVG Score",
+                                      y_title=y_title,
+                                      title=f"Linear Regression AVG Score vs AVG Score({lang})"
+                                                                    )
+            corr_list.append(corr_list_result)
+
+    def plot_leaderboard_poly_interpolated_lmcr_score(self,
+                                   df,
+                                   algorithm,
+                                   lang,
+                                   ):
+        # 入力は圧縮率とトーン効率
+        cs_col = pl.col("metrics.compressed_size")
+        ts_col = pl.col("metrics.tokenized_size")
+        size_col = pl.col("metrics.original_size")
+        X = df.select((cs_col/size_col).alias("compression_ratio"),
+                      (ts_col/size_col).alias("tokenized_ratio"),
+                      ) # shape(N, 2)
+        from sklearn.preprocessing import PolynomialFeatures
+        poly_extractor = PolynomialFeatures(degree=2, include_bias=True)
+        X_poly = poly_extractor.fit_transform(X) # shape(N, 6)
+
+        score_col = pl.col("AVG")
+        Y = df.select(score_col)
+        from sklearn.linear_model import LinearRegression
+        linear_model = LinearRegression()
+        linear_model.fit(X_poly, Y)
+
+
+        corr_list = []
+        for input_length, length_df in df.group_by("metrics.original_size"):
+            print(f"input_length={input_length}")
+            # nはモデル数
+            x = length_df.select((cs_col/size_col).alias("compression_ratio"),
+                                 (ts_col/size_col).alias("tokenized_ratio"),
+                                 ) # shape(n, 2)
+            x_poly = poly_extractor.fit_transform(x) # shape(n, 6)
+            y = linear_model.predict(x_poly) # (n, 1)
+            length_df = length_df.with_columns([
+                    pl.Series("interpolated_llm_score", y.reshape(-1))
+                ]
+                )
+            
+            #print(f"length_df={length_df}")
+            y_title = f"Interpolated LMCR Index(input={int(input_length[0])} characters)"
+            corr_list_result = self.plot_leaderboard_score_score_by_model(
+                                      length_df, 
+                                      algorithm, 
+                                      #option=input_length,
+                                      option=None,
+                                      x_func=self.get_leaderboard_score,
+                                      y_func=self.get_poly_interpolated_llm_score,
+                                      x_title="Leaderboard Score",
                                       y_title=y_title,
                                       title=f"LMCR Index vs Token Efficiency({lang})"
                                                                     )
             corr_list.append(corr_list_result)
-    """
+
     def plot_graph(self,
                    df_report: pl.DataFrame,
                    lang: str,
@@ -593,6 +712,10 @@ class Analyzer:
 
             self.plot_leaderboard_modified_lmcr(df, algorithm, lang)
 
+            self.plot_leaderboard_complex_lmcr(df, algorithm, lang)            
+
+            self.plot_leaderboard_poly_interpolated_lmcr_score(df, algorithm, lang)
+
             self.plot_leaderboard_token_efficiency(df, algorithm, lang)
 
             self.plot_lmcr_token_efficiency(df, algorithm, lang)
@@ -622,7 +745,7 @@ class Analyzer:
                         )
 
 
-    def plot_token_efficiency(self,
+    def plot_token_efficiency_by_model(self,
                               df,
                               df_e,
                               ):
@@ -648,5 +771,40 @@ class Analyzer:
         plt.ylabel("Token Efficiency(token length/input bytes)")
         plt.title(f"Token Efficiency by Model")
         plt.xticks(x-width/2-2, models, rotation=45)  # X軸のラベルを回転して見やすくする
+        plt.legend()
+        plt.show()
+
+    def plot_token_efficiency_by_avg_score(self,
+                              df,
+                              df_e,
+                              ):
+        # データ取得
+        models = self.shrink_model_name(df["Model"].to_list())
+        efficiency = df["metrics.token_efficiency"].to_list()
+        scores = df["AVG"].to_list()
+        tup = zip(models, efficiency, scores)
+        #print(list(tup))
+        sorted_tup = sorted(tup, key=lambda llm: llm[2])
+        print(sorted_tup)
+        models, efficiency, scores = zip(*sorted_tup)
+
+        #models = self.shrink_model_name(df_e["Model"].to_list())
+        #efficiency_e = df_e["metrics.token_efficiency"].to_list()
+
+        #models, efficiency_e = zip(*sorted(zip(models, efficiency_e)))    
+
+        # 棒グラフを描画
+        x = np.arange(len(models))
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(8, 5))
+        width = 0.4  # バーの幅
+        plt.scatter(scores, efficiency)
+        for x, y, label in zip(scores, efficiency, models):
+            plt.text(x + 0.01, y + 0.01, label, fontsize=10, color='darkslategray')
+    
+        plt.xlabel("AVG Scores")
+        plt.ylabel("Token Efficiency(token length/input bytes)")
+        plt.title(f"Token Efficiency by Score")
+        #plt.xticks(x-width/2-2, models, rotation=45)  # X軸のラベルを回転して見やすくする
         plt.legend()
         plt.show()

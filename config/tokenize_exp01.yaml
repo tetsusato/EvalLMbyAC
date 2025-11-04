@@ -1,0 +1,17 @@
+exp:
+    title: "tokenize-exp01"
+    summary: "プレゼン資料用"
+    llm: "google/gemma-1.1-7b-it" # 呼び出しシェルから上書きされる
+    input: "./kaggle-resume/12635195.txt" # 呼び出しシェルから上書きされる
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "fit2025"
+
+

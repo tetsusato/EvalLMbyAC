@@ -1,0 +1,17 @@
+exp:
+    title: "fit2025-paper-00" # exp(実験)までもいかない開発状態
+    summary: "vLLM導入とかいろいろのための短い文書解析の精度検証のため"
+    llm: "meta-llama/Llama-3.2-3B-Instruct"
+    input: "test-input-data/minimum.txt"
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: True # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "defaultCache"
+
+
