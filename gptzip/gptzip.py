@@ -9,7 +9,7 @@ import os
 import pickle
 import torch
 import tqdm
-from vllm import LLM, SamplingParams
+#from vllm import LLM, SamplingParams
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, cache_utils, HybridCache, StaticCache
 
@@ -120,9 +120,9 @@ class ArithmeticCoder:
             logger.debug(f"input_ids.shape={input_ids.shape}")
             with torch.no_grad():
                 output = self.lm(
-                    #input_ids=input_ids.to(self._lm_device),
+                    input_ids=input_ids.to(self._lm_device),
                     #input_ids=input_ids.to("cuda"),
-                    input_ids=input_ids,
+                    #input_ids=input_ids,
 
                     past_key_values=past_key_values,
                     #use_cache=False,

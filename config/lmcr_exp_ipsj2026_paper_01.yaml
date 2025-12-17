@@ -1,0 +1,21 @@
+exp:
+    summary: "IPSJ2026の論文投稿用の実験．01は，まず動かす．aeのみでいい．pplとか無しでいい"
+    title: "ipsj2026_paper_01"
+    llm: "google/gemma-1.1-7b-it" # 呼び出しシェルから上書きされる
+    input: "./kaggle-resume/12635195.txt" # 呼び出しシェルから上書きされる
+    inputs_limit: 100
+    log_dir: "./log_ipsj2026paper"
+    #device: "auto"
+    device: "cpu"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+    max_vocab_size: 200000 # VR-LMCR計算用の語彙数基準値
+    gamma: 1.0 # VR-LMCR計算用パラメータ
+    clear_previous_runs: True  # 実験開始時に同じexp_titleの過去のrunを削除するか
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "ipsj2026_paper"
+
+
