@@ -41,6 +41,7 @@ class LMCR:
                  ):
         # 実験設定の初期化
         self.exp_title = cfg.exp.title  # 実験タイトル
+        self.encoding_algorithm = cfg.exp.encoding_algorithm  # 符号化アルゴリズム
         self.tokenizer = None  # トークナイザー（後で初期化）
         self.tokenizer_name = None  # トークナイザー名
         self.model = None  # 言語モデル（後で初期化）
@@ -76,14 +77,32 @@ class LMCR:
             os.mkdir(self.exp_log_dir)
 
         # キャッシュの初期化（実験結果の再利用のため）
-        logger.info(f"Debug Cache Config: enable={cfg.cache.enable}")
-        if cfg.cache.enable:
-            cache_filename = f"{self.exp_title}.db"
-            self.cache = Cache(cfg=cfg,
-                               cache_filename=cache_filename,
-                               )
+        logger.info(f"Debug Cache Config: l1_enable={cfg.cache.l1_cache.enable}, l2_enable={cfg.cache.l2_cache.enable}")
+        
+        # L1 CACHE: Research Results (tied to exp_title)
+        if cfg.cache.l1_cache.enable:
+            self.L1_CACHE = Cache(cfg=cfg.cache.l1_cache,
+                                  cache_filename=f"{self.exp_title}.db",
+                                  )
         else:
-            self.cache = None
+            self.L1_CACHE = None
+        
+        # L2 CACHE: LLM Outputs (tied to model_name + input file)
+        # Avoid collisions/redundancy by using model+input as key for separation
+        self.model_name_safe = self.model_huggingface_id.replace("/", "-")
+        input_basename = Path(self.input).stem
+        input_basename_safe = input_basename.replace("/", "-").replace(".", "-")
+        l2_filename = f"{self.model_name_safe}-{input_basename_safe}.db"
+    
+        if cfg.cache.l2_cache.enable:
+            self.L2_CACHE = Cache(cfg=cfg.cache.l2_cache,
+                                  cache_filename=l2_filename,
+                                  )
+        else:
+            self.L2_CACHE = None
+        
+        # 古いコードがあったらエラーで検知する
+        self.cache = None
         # MLflowに設定パラメータを記録
         # Note: mlflow.log_params()はmlflow.start_run()のコンテキスト内で呼ぶ必要がある
         # そうしないと自動的に新しいrunが作成されてしまう
@@ -184,6 +203,9 @@ class LMCR:
         progress.info(f"decoded examples2={decoded}(tokenizer.convert_ids_tokens)")
         tokenized_size = len(input_ids_tensor[-1])
         print(f"tokenized msg len={tokenized_size}")
+        
+        # tokenized_sizeは入力テキスト長に依存して変化する（同じモデルでも入力が異なれば変わる）
+        # モデルごとの語彙数（vocab_size）とは異なるので注意
         mlflow.log_metric("tokenized_size", tokenized_size)
         input_len = len(msg)
         tokens_len = len(input_ids_tensor[-1])
@@ -351,12 +373,12 @@ class LMCR:
         logger.debug(f"cache={self.cache}")
         logger.debug(f"basic_info={basic_info}")
         # キャッシュが有効な場合、過去の実験結果を確認
-        if self.cache is not None:
+        if self.L1_CACHE is not None:
             cache_key = self.get_cache_key(func)
             logger.debug(f"cache key={cache_key}")
             if cache_key is not None:
                 logger.debug("cache key found")
-                cache_val = self.cache.get(cache_key)
+                cache_val = self.L1_CACHE.get(cache_key)
             else:
                 # 通常、ここは通らないはず
                 logger.debug("cache key not found")
@@ -374,8 +396,8 @@ class LMCR:
                             )
             logger.debug(f"result_df={result_df}")
             # 実行結果をキャッシュに保存
-            if self.cache is not None:
-                self.cache.set(cache_key,
+            if self.L1_CACHE is not None:
+                self.L1_CACHE.set(cache_key,
                                result_df,
                                )
         else:
@@ -398,7 +420,7 @@ class LMCR:
         progress.info(f"total time={input_analysis_time}")
 
     def execute_ae(self,
-                cache_val: bool,
+                l1_cache_val: bool,
                 input_dir: str,
                 text_path: str,
                 basic_info: str,
@@ -417,18 +439,17 @@ class LMCR:
         Returns:
             pl.DataFrame: 実験結果
         """
-        if cache_val is None:
+        if l1_cache_val is None:
             result_df = self.encode_decode_test(input_dir,
                                                 text_path,
                                                 basic_info,
                                                 func_name=func_name,
                                                )
         else:
-
-            result_df = pl.DataFrame([cache_val])
+            result_df = pl.DataFrame([l1_cache_val])
         return result_df    
     def execute_ppl(self,
-                cache_val: bool,
+                l1_cache_val: bool,
                 input_dir: str,
                 text_path: str,
                     basic_info: str,
@@ -447,7 +468,7 @@ class LMCR:
         Returns:
             pl.DataFrame: 実験結果
         """
-        if cache_val is None:
+        if l1_cache_val is None:
             result_df = self.perplexity_test(input_dir,
                                              text_path,
                                              basic_info,
@@ -455,7 +476,7 @@ class LMCR:
                                             )
         else:
 
-            result_df = pl.DataFrame([cache_val])
+            result_df = pl.DataFrame([l1_cache_val])
         return result_df    
     
     def encode_decode_test(self,
@@ -489,47 +510,66 @@ class LMCR:
             from gptzip.gptzip_online import ArithmeticCoder
             self.compression_algorithm = "gptzip_online"
         
-        # 算術符号化器の初期化
-        coder = ArithmeticCoder(lm=self.model,
-                                tokenizer=self.tokenizer,
-                                use_cache=self.use_cache,
-                                cache=self.cache,
-                                )
+        if self.encoding_algorithm == "ae":
+            # 算術符号化器の初期化
+            coder = ArithmeticCoder(lm=self.model,
+                                    tokenizer=self.tokenizer,
+                                    use_cache=self.use_cache,
+                                    cache=self.cache,
+                                    )
         msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
         msg_example = msg[0:40]
         logger.info(f"file={text_path}, contents={msg_example}")
         progress.info(f"file={text_path}, contents={msg_example}")
         # エンコード（圧縮）の実行
-        start = time.time()        
-        coder, code, num_padded_bits, text_limit = self.encoding(input_dir,
+
+        l2_cache_key = f"{self.exp_title}-{self.model_name_safe}-{input_dir}-{text_path}-{func_name}"
+        if self.L2_CACHE is not None:
+
+            code = self.L2_CACHE.get(l2_cache_key)
+            if code is not None:
+                logger.info(f"Cache hit for {l2_cache_key}")
+                progress.info(f"Cache hit for {l2_cache_key}")
+                # キャッシュを使った場合，msg == decoded_stringは保証されている
+                decoded_string = msg
+                encode_time = 0
+                decode_time = 0
+
+        if self.L2_CACHE is None or code is None:
+            # キャッシュを使わない設定か，キャッシュがない場合
+            start = time.time()
+            coder, code, num_padded_bits, text_limit = self.encoding(input_dir,
                                                      text_path,
                                                      basic_info,
                                                      func_name,
                                                      )
-        end = time.time()
-        encode_time = end-start
-        # デコード（解凍）の実行
-        start = time.time()
-        decoded_string, is_success = self.decoding(coder,
-                                                   code,
-                                                   num_padded_bits,
-                                                   text_limit,
-                                                   input_dir,
-                                                   text_path,
-                                                   basic_info,
-                                                   func_name,
-                                                   )
-        end = time.time()
-        decode_time = end - start
+            end = time.time()
+            encode_time = end-start
+            # デコード（解凍）の実行
+            decoded_string, is_success = self.decoding(coder,
+                                                code,
+                                                num_padded_bits,
+                                                text_limit,
+                                                input_dir,
+                                                text_path,
+                                                basic_info,
+                                                func_name,
+                                                )
+            end = time.time()
+            decode_time = end - start
         
-        # 入力と出力が一致するか検証（ロスレス圧縮の確認）
-        if msg.rstrip("\r\n") != decoded_string.rstrip("\r\n"):
-            logger.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
-            progress.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
-            logger.info(f"input: {msg}")
-            logger.info(f"output: {decoded_string}")
-            logger.info(f"diff: {get_diff_hl(msg, decoded_string)}")
-            is_success=False
+            # 入力と出力が一致するか検証（ロスレス圧縮の確認）
+            if msg.rstrip("\r\n") != decoded_string.rstrip("\r\n"):
+                logger.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
+                progress.info(f"!!!!!!!!!!!!!! The input string does ont match the output.")
+                logger.info(f"input: {msg}")
+                logger.info(f"output: {decoded_string}")
+                logger.info(f"diff: {get_diff_hl(msg, decoded_string)}")
+                is_success=False
+
+            # 検証完了ならキャッシュに保存
+            if self.L2_CACHE is not None:
+                self.L2_CACHE.set(l2_cache_key, code)
 
         # 圧縮率の計算
         ratio = len(code)/len(msg)
@@ -547,10 +587,12 @@ class LMCR:
             logger.info("Skipped VR-LMCR calculation due to missing vocab size info")
 
         model_name = self.model.name_or_path
-        title = f"{self.exp_title}(ae)"
+        #title = f"{self.exp_title}(ae)"
+        title = self.exp_title
         hosting = self.hosting
         result = Result(
                         title,
+                        self.encoding_algorithm,
                         hosting,
                         model_name,
                         text_path,
@@ -566,16 +608,16 @@ class LMCR:
                         vr_lmcr_realistic=None,  # 後で実装
                        )
 
-        if self.cache is not None:
-            cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
-            self.cache.set(cache_key, result)
+        # if self.L2_CACHE is not None:
+        #     cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
+        #     self.L2_CACHE.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
         logger.info(f"result_df={result_df}")
-        logger.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
-        progress.info(f"Compression {len(msg)} bytes to {len(code)} bytes.({basic_info})")
-        logger.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes.({basic_info})")
-        progress.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} bytes.({basic_info})")            
+        logger.info(f"Compression {len(msg)} chars to {len(code)} bytes.({basic_info})")
+        progress.info(f"Compression {len(msg)} chars to {len(code)} bytes.({basic_info})")
+        logger.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} chars.({basic_info})")
+        progress.info(f"DeCompression {len(code)} bytes to {len(decoded_string)} chars.({basic_info})")            
 
         data = f"data: {model_name}-{text_path}, "
         data += f"size: {len(msg)}-{len(code)}, "
@@ -641,6 +683,7 @@ class LMCR:
         hosting = self.hosting
         result = Result(
                         title,
+                        self.encoding_algorithm,
                         hosting,
                         model_name,
                         text_path,
@@ -653,9 +696,9 @@ class LMCR:
                         basic_info,
                        )
 
-        if self.cache is not None:
+        if self.L1_CACHE is not None:
             cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
-            self.cache.set(cache_key, result)
+            self.L1_CACHE.set(cache_key, result)
 
         result_df = pl.DataFrame([result])
         print(result_df)
@@ -687,7 +730,7 @@ class LMCR:
         coder = ArithmeticCoder(lm=self.model,
                                 tokenizer=self.tokenizer,
                                 #use_cache=self.use_cache,
-                                cache=self.cache,
+                                cache=self.L2_CACHE, # Use L2 Cache for LLM outputs
                                 model_huggingface_id = self.model_huggingface_id,
                                 )
         msg = Path(f"{input_dir}/{text_path}").read_text(encoding="utf-8")
@@ -762,11 +805,12 @@ if __name__ == "__main__":
     config_name = sys.argv[1] if len(sys.argv) > 1 else "config"
     print(f"config_name={config_name}")
     # パスを除去してファイル名のみ取得
-    #config_name = os.path.basename(config_name).replace('.yaml', '')
-    #config_name = os.path.basename(config_name)
+    config_name = os.path.basename(config_name).replace('.yaml', '')
+    config_name = os.path.basename(config_name)
     # Hydraで設定ファイルを読み込み
     #with initialize(config_path=".", job_name=__file__):
     with initialize(config_path="../../config", job_name=__file__):
+    #with initialize(config_path="../../", job_name=__file__):
         if override_options:
             cfg = compose(#config_name=sys.argv[1],
                           config_name=config_name,
@@ -776,7 +820,7 @@ if __name__ == "__main__":
         else:
             cfg = compose(#config_name=sys.argv[1],
                           config_name=config_name,
-                          #return_hydra_config=True,
+                          return_hydra_config=True,
                           )
     #print(f"cfg={cfg.config}")
     import pprint
@@ -787,21 +831,35 @@ if __name__ == "__main__":
     
     # 設定ファイル名から実験名を自動抽出
     # 命名規則: lmcr_exp_{実験名}.yaml → {実験名}
-    if not cfg.exp.get('title') or cfg.exp.title == "":
-        import re
-        # lmcr_exp_を削除
-        match = re.match(r'config/lmcr_exp_([^.]+)\.yaml$', config_name)
-        print(f"match={match}")
-        if match:
-            auto_title = match.group(1)
-            logger.info(f"Auto-extracted exp_title from config filename: {auto_title}")
-            # cfg.exp.titleを上書き（OmegaConfの構造を保持）
-            from omegaconf import OmegaConf
-            OmegaConf.set_struct(cfg, False)  # 構造の変更を許可
-            cfg.exp.title = auto_title
-            OmegaConf.set_struct(cfg, True)  # 構造を再度固定
-        else:
-            logger.warning(f"Could not extract exp_title from config filename: {config_name}")
+    # ファイル名から抽出できた場合は常に優先する
+    import re
+    # 元の引数からファイル名を取得
+    raw_config_path = sys.argv[1] if len(sys.argv) > 1 else ""
+    basename = os.path.basename(raw_config_path)
+    match = re.match(r'lmcr_exp_([^.]+)\.yaml$', basename)
+    
+    if match:
+        auto_title = match.group(1)
+        logger.info(f"Auto-extracted exp_title from config filename: {auto_title}")
+        # cfg.exp.titleをセット/上書き
+        from omegaconf import OmegaConf
+        try:
+             OmegaConf.set_struct(cfg, False)  # 構造の変更を許可
+             if 'exp' not in cfg:
+                 cfg.exp = {}
+             cfg.exp.title = auto_title
+             OmegaConf.set_struct(cfg, True)  # 構造を再度固定
+        except Exception as e:
+             logger.warning(f"Failed to set exp_title: {e}")
+             if isinstance(cfg, dict) or hasattr(cfg, '__setitem__'):
+                 if 'exp' not in cfg: cfg['exp'] = {}
+                 cfg['exp']['title'] = auto_title
+    else:
+        # ファイル名が命名規則に従っていない場合は、config内の記述を確認
+        current_title = cfg.exp.get('title')
+
+        logger.info(f"Using exp_title from config: {current_title}")
+
 
     exp_title=cfg.exp.title
     exp_summary=cfg.exp.summary
@@ -810,31 +868,17 @@ if __name__ == "__main__":
     # MLflowの設定とLMCRインスタンスの作成
     mlflow.set_tracking_uri(uri="http://localhost:8080")
     
-    # 過去のrunをクリアするオプションが有効な場合
-    if cfg.exp.get('clear_previous_runs', False):
-        logger.info(f"Clearing previous runs with exp_title = '{exp_title}'")
-        # exp_titleが完全一致するrunを検索（tags.exp_titleはカスタムタグとして記録される）
-        runs = mlflow.search_runs(
-            search_all_experiments=True,
-            filter_string=f"tags.exp_title = '{exp_title}'",
-            output_format="pandas"
-        )
-        if not runs.empty:
-            logger.info(f"Found {len(runs)} runs to delete")
-            from mlflow.tracking import MlflowClient
-            client = MlflowClient()
-            for run_id in runs['run_id']:
-                try:
-                    client.delete_run(run_id)
-                    logger.info(f"Deleted run: {run_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to delete run {run_id}: {e}")
-        else:
-            logger.info("No previous runs found to delete")
     
     exe = LMCR(cfg)
     # 算術符号化（Arithmetic Encoding）実験の実行
-    run_name = f"{exp_title}(ae)"
+    run_suffix = cfg.exp.get('run_suffix', "")
+    if run_suffix:
+        run_name = f"{exp_title}({run_suffix})"
+    else:
+        run_name = exp_title
+    
+    logger.info(f"Run Name set to: {run_name} (exp_title={exp_title}, run_suffix={run_suffix})")
+    
     mlflow.end_run()  # 既存のrunがあれば終了
     with mlflow.start_run(run_name=run_name) as run:
         # 実行開始日時を記録（loggerのログと突き合わせるため）
@@ -842,6 +886,13 @@ if __name__ == "__main__":
         start_datetime = datetime.now()
         start_time_str = start_datetime.strftime("%Y-%m-%d %H:%M:%S")
         mlflow.set_tag("start_time", start_time_str)
+        # 時間・分・秒を数値として取得し、辞書形式でまとめる
+        start_time_metrics = {
+            "start_hour": start_datetime.hour,
+            "start_minute": start_datetime.minute,
+            "start_second": start_datetime.second
+        }
+        mlflow.log_metrics(start_time_metrics)
         
         # 設定パラメータを記録
         mlflow.log_params(cfg)
@@ -857,7 +908,25 @@ if __name__ == "__main__":
         exe.input_analysis(exe.execute_ae)  # 圧縮・解凍実験
         exe.calculate_token_efficiency()  # トークン効率の計算
         #exe.generating_test()  # 生成テスト（コメントアウト中）
-    mlflow.end_run()
+        end_datetime = datetime.now()
+        end_time_str = end_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        mlflow.set_tag("end_time", end_time_str)
+        # 差分（duration）の計算
+        duration = end_datetime - start_datetime
+        total_seconds = duration.total_seconds()
+
+        # 各単位への換算 
+        duration_metrics = {
+            "duration_hours": total_seconds / 3600,          # 時間単位
+            "duration_minutes": total_seconds / 60,          # 分単位
+            "duration_seconds": total_seconds,               # 秒単位
+            "duration_ms": total_seconds * 1000             # ミリ秒単位
+        }
+
+        # MLflowに記録
+        mlflow.log_metrics(duration_metrics)
+
+        print(f"経過時間（秒）: {total_seconds}")
     # パープレキシティ実験（現在はコメントアウト中）
     """
     run_name = f"{exp_title}(ppl)"

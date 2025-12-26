@@ -1,0 +1,34 @@
+exp:
+    summary: "IPSJ2026の論文投稿用の実験．04と同じ設定で，L2キャッシュを有効化"
+    #title: "ipsj2026_paper_04"
+    run_suffix: "" # Run名に付与する補足説明 (e.g. "ae" -> title(ae))
+    llm: "google/gemma-1.1-7b-it" # 呼び出しシェルから上書きされる
+    input: "./kaggle-resume/12635195.txt" # 呼び出しシェルから上書きされる
+    inputs_limit: 100
+    log_dir: "./log_ipsj2026paper"
+    device: "auto"
+    #device: "cpu"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+    max_vocab_size: 200000 # VR-LMCR計算用の語彙数基準値
+    gamma: 1.0 # VR-LMCR計算用パラメータ
+    clear_previous_runs: False  # 実験開始時に同じexp_titleの過去のrunを削除するか
+    encoding_algorithm: "ae" # or "ppl" 
+
+cache:
+    l1_cache:
+        enable: False
+        top_dir: "CacheStorage"
+        root: "ipsj2026_paper"
+    l2_cache:
+        enable: True
+        top_dir: "CacheStorage_LLM"
+
+exp_models:
+  target_models:
+    #- "google/gemma-1.1-2b-it"
+    #- "google/gemma-2b-it"
+    - "llm-jp/llm-jp-3-440m-instruct2"
+    #- "Qwen/Qwen2-0.5B-Instruct"
+    #- "tiiuae/Falcon3-3B-Instruct"
+    #- "HuggingFaceTB/SmolLM2-1.7B-Instruct"

@@ -1,0 +1,19 @@
+exp:
+    title: "ipsj2026-exp03"
+    summary: "IPSJ2026投稿用実験 - VR-LMCRの出力をmlflowに入れて，marimoでグラフを描く．max_vocab_sizeを調整してスコアが1以下になるようにしたはず"
+    llm: "google/gemma-1.1-7b-it" # 呼び出しシェルから上書きされる
+    input: "./kaggle-resume/12635195.txt" # 呼び出しシェルから上書きされる
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+    max_vocab_size: 200000 # VR-LMCR計算用の語彙数基準値
+    gamma: 1.0 # VR-LMCR計算用パラメータ
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "ipsj2026"
+
+

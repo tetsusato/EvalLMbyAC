@@ -1,0 +1,20 @@
+exp:
+    # title: "ipsj2026-exp06"  # ファイル名から自動抽出されるため不要（lmcr_exp_ipsj2026_06.yaml → ipsj2026_06）
+    summary: "IPSJ2026投稿前の実験．シンプルなVocabulary-Ratio LMCRを全LLMで試す"
+    llm: "google/gemma-1.1-7b-it" # 呼び出しシェルから上書きされる
+    input: "./kaggle-resume/12635195.txt" # 呼び出しシェルから上書きされる
+    inputs_limit: 100
+    log_dir: "./dev_log"
+    device: "auto"
+    use_cache: False # KV cache
+    hosting: "huggingface" # or "openai", "vllm"
+    max_vocab_size: 200000 # VR-LMCR計算用の語彙数基準値
+    gamma: 1.0 # VR-LMCR計算用パラメータ
+    clear_previous_runs: false  # 実験開始時に同じexp_titleの過去のrunを削除するか
+
+cache:
+    enable: True
+    top_dir: "CacheStorage"
+    root: "ipsj2026"
+
+

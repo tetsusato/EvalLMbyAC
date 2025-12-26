@@ -51,38 +51,72 @@ class Analyzer:
     
     def __init__(self,
                  project_root: str,
+                 config_name: str = "lmcr_exp_fit2025exp07",
                  ):
+        """
+        Analyzerクラスの初期化
+        
+        Args:
+            project_root (str): プロジェクトのルートディレクトリのパス. uvのディレクトリ．
+            config_name (str): 読み込む設定ファイルの名前（拡張子なし）. デフォルトは "lmcr_exp_fit2025exp07".
+            
+        Note:
+            指定されたHydraの設定をロードし、キャッシュとMLflowのURIを設定します。
+        """
+        
         project_root_path = Path(project_root)
-        config = "lmcr_exp_fit2025exp07"
+        config = config_name
         config_dir = project_root_path / "config"
         with initialize_config_dir(version_base=None,
                                    config_dir=str(config_dir),
                                    ):
             cfg = compose(config_name=config)
+        self.cfg = cfg
         self.cache = Cache(cfg=cfg,
               cache_filename="cache_test",
               prefix="test",
               )
+        mlflow.set_tracking_uri("http://localhost:8080")
 
     def get_leaderboard_result(self,
                                query,
+                               cache_base_name="leaderboard_result",
+                               cache_tag_name="0814",
                                ):
-        key_base_name = "leaderboard_result"
-        key_tag_name = "0814"
-        key = f"{key_base_name}_{key_tag_name}"
-        cache_result = self.cache.get(key)
-        print(f"cache={cache_result}")
-        if cache_result is None:
-            result = self._get_leaderboard_result("")
+        
+        key_base_name = cache_base_name
+        key_tag_name = cache_tag_name
+        enable_cache = None
+        if key_base_name is key_tag_name is None:
+            enable_cache = False
+        if key_base_name is not None and key_tag_name is not None:
+            enable_cache = True
+        if enable_cache is None:
+            raise ValueError("cache_base_name and cache_tag_name must be both None or both not None")
+        if enable_cache:
+            # キャッシュを使う
+            key = f"{key_base_name}_{key_tag_name}"
+            cache_result = self.cache.get(key)
+            print(f"cache={cache_result}")
+            if cache_result is not None:
+                # キャッシュが存在したらそれを返す
+                return cache_result
+            # 存在しなければ仕方がないので取得してくる
+            #result = self._get_leaderboard_result(query)
+            result = self._get_leaderboard_result_via_space(query)
+            # キャッシュに保存する
             self.cache.set(key, result)
         else:
-            result = cache_result
+            # キャッシュを使わない
+            result = self._get_leaderboard_result(query)
         return result
 
-    def _get_leaderboard_result(self,
+    def _get_leaderboard_result_via_api(self,
                                query,
                                ):
-        client = Client("llm-jp/open-japanese-llm-leaderboard")
+        #client = Client("llm-jp/open-japanese-llm-leaderboard")
+        client = Client.duplicate("llm-jp/open-japanese-llm-leaderboard",
+                                  os.getenv("HF_TOKEN"))
         result = client.predict(
                                 #type_query=["🟢 pretrained","🔶 fine-tuned","⭕ instruction-tuned","🟦 RL-tuned (Preference optimization)","🌸 multimodal","🤝 base merges and moerges"],
                                 type_query=["⭕ instruction-tuned"],
@@ -120,7 +154,22 @@ class Analyzer:
                                 api_name="/update_table"
         )
         return result
-    
+    def _get_leaderboard_result_via_space(self,
+                                          query,
+                                          ):
+        import datasets
+        from src.llmjp.about import Tasks
+        from src.llmjp.populate import get_leaderboard_df
+        from src.llmjp.utils import (AutoEvalColumn,
+                                    COLS,
+                                    BENCHMARK_COLS,
+                                    )
+        df = get_leaderboard_df("llm-jp/leaderboard-contents", 
+                                COLS, 
+                                BENCHMARK_COLS)
+        return df
+        
+        
     def _leaderboard_data_to_polar_dataframe(self,
                                             result):
         schema_names = result["headers"]
@@ -174,11 +223,21 @@ class Analyzer:
         return leaderboard_df
 
     def search_model_from_mlflow(self,
-                                 queries,
+                                 queries=None,
                                  size_filter=None,
                                  run_name=None,
                                  ):
         # 条件をフィルタリングして検索（DataFrameで返る）
+        
+        if queries is None:
+            # configからtarget_modelsを取得
+            try:
+                # OmegaConfのListConfigはイテラブルなのでそのまま使える
+                queries = self.cfg.exp_models.target_models
+                print(f"Using target_models from config: {queries}")
+            except Exception as e:
+                print(f"Error retrieving target_models from config: {e}")
+                queries = []
 
         # experiment_idを指定（もしくは名前で取得）
         experiment_id = "Default"
@@ -188,31 +247,61 @@ class Analyzer:
             query_string = f"tags.model_name like '{query}'"
             #print(f"query_string={query_string}")
             if size_filter is not None:
-                query_string = f"{query_string} and metrics.original_size = {size_filter}"
+                query_string = f"{query_string} and metrics.input_text_length = {size_filter}"
             #print(f"query string={query_string}")
+            filter_string = f"tags.model_name like '{query}' and "\
+                            + f"tags.exp_title like '{run_name}'"
+            print(f"filter string={filter_string}")
             df = mlflow.search_runs(
-                experiment_names=[experiment_id],
-                filter_string=f"tags.model_name like '{query}' and tags.exp_title like '{run_name}'",
+                search_all_experiments=True,
+                #experiment_names=[experiment_id],
+                filter_string=filter_string,
                 #filter_string=f"tags.model_name like '{query}%'",
+                #filter_string=f"tags.model_name like '{query}'",
+                
                 order_by=["start_time DESC"],
                 output_format="pandas"
             )
             #print(f"df={df}")
             #print(f"include tags.model_name?={df}")
-            df = df.sort_values("start_time", ascending=False)\
-                   .groupby(["tags.model_name", "tags.algorithm", "metrics.original_size"])\
-                   .first()\
-                   .reset_index()
-            #print(f"first=>{df}")
-            if runs_df is None:
-                runs_df = df
-            else:
-                runs_df = pd.concat([runs_df, df])
+            if df.empty is False:
+                df = df.sort_values("start_time", ascending=False)\
+                       .groupby(["tags.model_name", "tags.algorithm", "metrics.input_text_length"])\
+                       .first()\
+                       .reset_index()
+                #print(f"first=>{df}")
+                if runs_df is None:
+                    runs_df = df
+                else:
+                    runs_df = pd.concat([runs_df, df])
         runs_df = pl.from_pandas(runs_df)
         return runs_df
 
     def mlflow_results_df_to_analytics_df(self,
                                           df):
+        """
+        MLflowから取得した実験結果DataFrameを分析用に整形する
+
+        MLflowのtagsやmetricsプレフィックス付きのカラムから、分析に必要な以下のカラムを選択します：
+        - tags.model_name
+        - tags.input_file_name
+        - tags.algorithm
+        - metrics.input_text_length
+        - metrics.tokenized_size
+        - metrics.compressed_size
+        - metrics.token_efficiency
+        - metrics.llm_score
+        - metrics.vr_lmcr_naive
+
+        また、データを `tags.algorithm` および `tags.model_name` でグルーピングして再構築することで、
+        データの並び順を整えています。
+
+        Args:
+            df (pl.DataFrame): MLflowの検索結果（Polars DataFrame）
+
+        Returns:
+            pl.DataFrame: 分析に必要なカラムを抽出し、整列させたDataFrame
+        """
         from pprint import pprint
         # グラフを描くために必要な項目の取り出しと確認
         #pprint(df.schema)
@@ -220,11 +309,12 @@ class Analyzer:
                   pl.col('tags.model_name'),
                   pl.col('tags.input_file_name'),
                   pl.col('tags.algorithm'),
-                  pl.col('metrics.original_size'),
+                  pl.col('metrics.input_text_length'),
                   pl.col('metrics.tokenized_size'),
                   pl.col('metrics.compressed_size'),
                   pl.col('metrics.token_efficiency'),
-                  pl.col('metrics.llm_score')
+                  pl.col('metrics.llm_score'),
+                  pl.col('metrics.vr_lmcr_naive')  # VR-LMCRメトリックを追加
                  ).group_by("tags.algorithm",maintain_order=True)
         total_exp_df = pl.DataFrame()
         for algorithm, data_df in df_exp:
@@ -259,7 +349,7 @@ class Analyzer:
     def get_modified_llm_score(self,
                                df):
         # これがLate-stage LMCRのはず
-        original_size = df["metrics.original_size"].item()
+        original_size = df["metrics.input_text_length"].item()
         tokenized_size = df["metrics.tokenized_size"].item()
         encoded_size = df["metrics.compressed_size"].item()
         score = encoded_size/tokenized_size
@@ -267,7 +357,7 @@ class Analyzer:
 
     def get_complex_llm_score(self,
                                df):
-        original_size = df["metrics.original_size"].item()
+        original_size = df["metrics.input_text_length"].item()
         tokenized_size = df["metrics.tokenized_size"].item()
         encoded_size = df["metrics.compressed_size"].item()
         token_efficiency = tokenized_size/original_size
@@ -387,10 +477,27 @@ class Analyzer:
                                     leaderboard_df,
                                     total_exp_df,
                                     ):
+        """
+        リーダーボードのデータと実験結果のデータを結合し、レポート用のDataFrameを作成する。
+
+        処理内容:
+        1. リーダーボードデータと実験結果データをモデル名をキーに結合する。
+        2. Few-shot数が4のデータのみを抽出する。
+        3. 不要なカラム（ID, Few-shot）を削除する。
+
+        Args:
+            leaderboard_df (pl.DataFrame): リーダーボードのデータ
+            total_exp_df (pl.DataFrame): 実験結果のデータ（mlflow_results_df_to_analytics_dfの出力）
+
+        Returns:
+            pl.DataFrame: 結合・フィルタリング済みのレポート用DataFrame
+        """
+          #.filter(pl.col("average_type") == "4-shot")\
+                  #.drop(pl.col("average_type"))
         df_report = leaderboard_df.join(total_exp_df.rename({"tags.model_name": "Model"}), on="Model")\
-        .filter(pl.col("average_type") == "4-shot")\
+        .filter(pl.col("Few-shot") == 4)\
         .drop(pl.col("ID"))\
-        .drop(pl.col("average_type"))
+        .drop(pl.col("Few-shot"))
         return df_report
     
     def plot_size_score_by_model(self,
@@ -405,19 +512,19 @@ class Analyzer:
         for model, model_df in df.group_by("Model"):
             #print(f"model={model}")
             #print(f"model_df={model_df}")
-            plt.plot(model_df["metrics.original_size"], 
+            plt.plot(model_df["metrics.input_text_length"], 
                      model_df["metrics.llm_score"],
                      label=f"{model[0]}-{algorithm[0]}",  # ← ラベルを設定！
                      marker="o",
                     )
         # 凡例とラベルの表示
-        plt.xlabel("Original Size")
+        plt.xlabel("Input Text Length")
         if algorithm[0] == "ae":
             plt.ylabel("LMCR Index")
         else:
             plt.ylabel("Perplexity")
 
-        plt.title(f"Score({lang}) vs Original Size by Algorithm and Model")
+        plt.title(f"Score({lang}) vs Input Text Length by Algorithm and Model")
         #plt.legend()  # ← 凡例を表示する
         plt.grid(True)
         plt.show()
@@ -430,7 +537,7 @@ class Analyzer:
         # 入力長別に正解とスコアをプロット
         # 入力長ごとに，モデルごとの相関係数
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             #print(f"length_df={length_df}")
 
@@ -457,7 +564,7 @@ class Analyzer:
                                        lang,
                                        ):
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             #print(f"length_df={length_df}")
             # input_lengthはtupleなのでスカラー値として取り出す
@@ -481,7 +588,7 @@ class Analyzer:
                                        ):
         cs_col = pl.col("metrics.compressed_size")
         ts_col = pl.col("metrics.tokenized_size")
-        size_col = pl.col("metrics.original_size")
+        size_col = pl.col("metrics.input_text_length")
         X = df.select((cs_col/size_col).alias("compression_ratio"),
                       (ts_col/size_col).alias("tokenized_ratio"),
                       ) # shape(N, 2)
@@ -511,7 +618,7 @@ class Analyzer:
             ])
 
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             #print(f"length_df={length_df}")
             # input_lengthはtupleなのでスカラー値として取り出す
@@ -535,7 +642,7 @@ class Analyzer:
                                           lang,
                                           ):
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             #print(f"length_df={length_df}")
             y_title = f"Token Efficiency(input={int(input_length[0])} characters)"
@@ -558,7 +665,7 @@ class Analyzer:
                                    lang,
                                    ):
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             #print(f"length_df={length_df}")
             y_title = f"Token Efficiency(input={int(input_length[0])} characters)"
@@ -584,7 +691,7 @@ class Analyzer:
         # 入力は圧縮率とトーン効率
         cs_col = pl.col("metrics.compressed_size")
         ts_col = pl.col("metrics.tokenized_size")
-        size_col = pl.col("metrics.original_size")
+        size_col = pl.col("metrics.input_text_length")
         X = df.select((cs_col/size_col).alias("compression_ratio"),
                       (ts_col/size_col).alias("tokenized_ratio"),
                       ) # shape(N, 2)
@@ -601,7 +708,7 @@ class Analyzer:
 
 
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             # Xと違ってxは１行の想定
             x = df.select((cs_col/size_col).alias("compression_ratio"),
@@ -638,7 +745,7 @@ class Analyzer:
         # 入力は圧縮率とトーン効率
         cs_col = pl.col("metrics.compressed_size")
         ts_col = pl.col("metrics.tokenized_size")
-        size_col = pl.col("metrics.original_size")
+        size_col = pl.col("metrics.input_text_length")
         X = df.select((cs_col/size_col).alias("compression_ratio"),
                       (ts_col/size_col).alias("tokenized_ratio"),
                       ) # shape(N, 2)
@@ -654,7 +761,7 @@ class Analyzer:
 
 
         corr_list = []
-        for input_length, length_df in df.group_by("metrics.original_size"):
+        for input_length, length_df in df.group_by("metrics.input_text_length"):
             print(f"input_length={input_length}")
             # nはモデル数
             x = length_df.select((cs_col/size_col).alias("compression_ratio"),
@@ -678,7 +785,7 @@ class Analyzer:
                                       y_func=self.get_poly_interpolated_llm_score,
                                       x_title="Leaderboard Score",
                                       y_title=y_title,
-                                      title=f"LMCR Index vs Token Efficiency({lang})"
+                                      title=f"Leaderboard Score vs Interpolated LMCR Index({lang})"
                                                                     )
             corr_list.append(corr_list_result)
 
@@ -729,7 +836,7 @@ class Analyzer:
                 # DataFrameにタスク列が存在するか確認
                 if f"AVG ({task_col})" in df.columns:
                     print(f"creating graph for {task_col}")
-                    for input_length, length_df in df.group_by("metrics.original_size"):
+                    for input_length, length_df in df.group_by("metrics.input_text_length"):
                         y_title = f"LMCR Index(input={int(input_length[0])} characters)"
                         self.plot_leaderboard_score_score_by_model(
                             #df,

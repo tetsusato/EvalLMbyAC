@@ -16,7 +16,7 @@ def _():
             p = model[arg]
             l = math.log(p)
             ppl = math.exp(-1/1*l)
-            print(f"model={model}, ppl={ppl}")
+            print(f"model={model}, args={arg}, ppl={ppl}")
     perp("猫")
     perp("人間")
     return

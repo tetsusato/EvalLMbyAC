@@ -42,17 +42,26 @@ class Cache():
                             where the item is stored. (required)
  
         """
-        top_dir = cfg.cache.top_dir
-        root = cfg.cache.root
+        if cfg is not None:
+            # cfgがDictConfigの場合、.get()でデフォルト値を指定して安全に取得
+            top_dir = cfg.get("top_dir", "CacheStorage")
+            root = cfg.get("root", "")
+            enable = cfg.get("enable", True)
+
         if prefix is not None:
             self.key_prefix = prefix
         else:
             self.key_prefix = root
-        logger.debug(f"Creating a cache object. key_prefix={self.key_prefix}, saves to {cache_filename}, flag cache_enable={cfg.cache.enable}")
-        if cfg.cache.enable:
-            filename = f"{top_dir}/" \
-                       + f"{self.key_prefix}/" \
-                       + f"{cache_filename}"
+        
+        logger.debug(f"Creating a cache object. key_prefix={self.key_prefix}, saves to {cache_filename}, enable={enable}")
+        
+        if enable:
+            if self.key_prefix:
+                filename = f"{top_dir}/{self.key_prefix}/{cache_filename}"
+            else:
+                filename = f"{top_dir}/{cache_filename}"
+            filename = filename.replace("//", "/")
+            
             logger.debug(f"Cache file = {filename}")
             self.is_enable = True
             self.db = diskcache.Cache(filename)
@@ -68,19 +77,23 @@ class Cache():
     def set(self,
             key: str,
             val: str | object):
-        if val.__class__.__name__ == "str":
-            ret = self.db.set(key, val)
-        else:
-            serialized_val = pickle.dumps(val)
-            ret = self.db.set(key, serialized_val)
-        #self.db.sync()
+        # if val.__class__.__name__ == "str":
+        #     ret = self.db.set(key, val)
+        # else:
+        #     serialized_val = pickle.dumps(val)
+        #     ret = self.db.set(key, serialized_val)
+        # #self.db.sync()
+        # 流石に自動的にシリアライズされるっぽいので修正
+        ret = self.db.set(key, val)
         return ret
 
     def get(self, key):
+        # val = self.db.get(key)
+        # logger.debug(f"val={val}({val.__class__}")
+        # if val.__class__.__name__ == "bytes":
+        #     val = pickle.loads(val)
+        # 流石に自動的にデシリアライズされるっぽいので修正
         val = self.db.get(key)
-        logger.debug(f"val={val}({val.__class__}")
-        if val.__class__.__name__ == "bytes":
-            val = pickle.loads(val)
         #logger.debug(f"key={key}")
         #logger.debug(f"val={val}")
         return val

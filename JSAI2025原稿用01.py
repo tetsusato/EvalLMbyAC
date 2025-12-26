@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.11.17"
+__generated_with = "0.13.4"
 app = marimo.App()
 
 
@@ -86,23 +86,7 @@ def _():
 
     plt.tight_layout()
     plt.show()
-    return (
-        ae_data,
-        ae_df,
-        ae_files,
-        df,
-        directory,
-        file,
-        filename,
-        glob,
-        os,
-        pl,
-        plt,
-        ppl_data,
-        ppl_df,
-        ppl_files,
-        sns,
-    )
+    return glob, os, pl, plt, sns
 
 
 @app.cell
@@ -157,18 +141,7 @@ def _(glob, os, pl, plt, sns):
         plt.grid(True)
     plt.tight_layout()
     plt.show()
-    return (
-        ae_data_1,
-        ae_df_1,
-        ae_files_1,
-        df_1,
-        directory_1,
-        file_1,
-        filename_1,
-        ppl_data_1,
-        ppl_df_1,
-        ppl_files_1,
-    )
+    return
 
 
 @app.cell
@@ -224,18 +197,7 @@ def _(glob, os, pl, plt, sns):
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-    return (
-        ae_data_2,
-        ae_df_2,
-        ae_files_2,
-        df_2,
-        directory_2,
-        file_2,
-        filename_2,
-        ppl_data_2,
-        ppl_df_2,
-        ppl_files_2,
-    )
+    return (ppl_df_2,)
 
 
 @app.cell
@@ -297,18 +259,7 @@ def _(glob, os, pl, plt, sns):
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-    return (
-        ae_data_3,
-        ae_df_3,
-        ae_files_3,
-        df_3,
-        directory_3,
-        file_3,
-        filename_3,
-        ppl_data_3,
-        ppl_df_3,
-        ppl_files_3,
-    )
+    return
 
 
 @app.cell
@@ -366,20 +317,7 @@ def _(glob, os, pl, plt, sns):
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-    return (
-        ae_avg,
-        ae_data_4,
-        ae_df_4,
-        ae_files_4,
-        df_4,
-        directory_4,
-        file_4,
-        filename_4,
-        ppl_avg,
-        ppl_data_4,
-        ppl_df_4,
-        ppl_files_4,
-    )
+    return
 
 
 @app.cell
@@ -437,20 +375,7 @@ def _(glob, os, pl, plt, sns):
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-    return (
-        ae_data_5,
-        ae_df_5,
-        ae_files_5,
-        ae_max,
-        df_5,
-        directory_5,
-        file_5,
-        filename_5,
-        ppl_data_5,
-        ppl_df_5,
-        ppl_files_5,
-        ppl_max,
-    )
+    return
 
 
 @app.cell
@@ -540,24 +465,7 @@ def _(glob, os, pl, plt, sns):
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-    return (
-        ae_avg_1,
-        ae_data_6,
-        ae_df_6,
-        ae_files_6,
-        ae_max_1,
-        ae_min,
-        df_6,
-        directory_6,
-        file_6,
-        filename_6,
-        ppl_avg_1,
-        ppl_data_6,
-        ppl_df_6,
-        ppl_files_6,
-        ppl_max_1,
-        ppl_min,
-    )
+    return
 
 
 @app.cell
@@ -640,26 +548,7 @@ def _(glob, os, pl, plt, sns):
         axes[1, 2].grid(axis='y')
     plt.tight_layout()
     plt.show()
-    return (
-        ae_avg_2,
-        ae_data_7,
-        ae_df_7,
-        ae_files_7,
-        ae_max_2,
-        ae_min_1,
-        axes,
-        df_7,
-        directory_7,
-        fig,
-        file_7,
-        filename_7,
-        ppl_avg_2,
-        ppl_data_7,
-        ppl_df_7,
-        ppl_files_7,
-        ppl_max_2,
-        ppl_min_1,
-    )
+    return
 
 
 @app.cell
@@ -745,27 +634,7 @@ def _(glob, os, pl, plt, sns):
         axes_1[1, 2].grid(axis='y')
     plt.tight_layout()
     plt.show()
-    return (
-        ae_avg_3,
-        ae_data_8,
-        ae_df_8,
-        ae_files_8,
-        ae_max_3,
-        ae_min_2,
-        axes_1,
-        df_8,
-        directory_8,
-        fig_1,
-        file_8,
-        filename_8,
-        ppl_avg_3,
-        ppl_data_8,
-        ppl_df_8,
-        ppl_files_8,
-        ppl_max_3,
-        ppl_min_2,
-        shorten_filename,
-    )
+    return
 
 
 @app.cell
@@ -824,23 +693,7 @@ def _(glob, os, pl, plt, sns):
         axes_2[1].grid(axis='y')
     plt.tight_layout()
     plt.show()
-    return (
-        ae_avg_4,
-        ae_data_9,
-        ae_df_9,
-        ae_files_9,
-        axes_2,
-        df_9,
-        directory_9,
-        fig_2,
-        file_9,
-        filename_9,
-        ppl_avg_4,
-        ppl_data_9,
-        ppl_df_9,
-        ppl_files_9,
-        shorten_filename_1,
-    )
+    return
 
 
 @app.cell
@@ -926,27 +779,7 @@ def _(glob, os, pl, plt, sns):
         axes_3[1, 2].grid(axis='y')
     plt.tight_layout()
     plt.show()
-    return (
-        ae_avg_5,
-        ae_data_10,
-        ae_df_10,
-        ae_files_10,
-        ae_max_4,
-        ae_min_3,
-        axes_3,
-        df_10,
-        directory_10,
-        fig_3,
-        file_10,
-        filename_10,
-        ppl_avg_5,
-        ppl_data_10,
-        ppl_df_10,
-        ppl_files_10,
-        ppl_max_4,
-        ppl_min_3,
-        shorten_filename_2,
-    )
+    return
 
 
 @app.cell
@@ -1002,21 +835,7 @@ def _(glob, os, pl, plt, sns):
     axes_4[1].grid(axis='y')
     plt.tight_layout()
     plt.show()
-    return (
-        ae_files_11,
-        axes_4,
-        base_filename,
-        data,
-        df_11,
-        df_melt_max,
-        df_melt_min,
-        directory_11,
-        fig_4,
-        file_11,
-        pd,
-        ppl_files_11,
-        shorten_filename_3,
-    )
+    return (data,)
 
 
 @app.cell
@@ -1120,19 +939,7 @@ def _(llmjp_score, os, pl):
     print(f"data_1={data_1}")
     df_final = pl.DataFrame(data_1).sort('index')
     print(df_final)
-    return (
-        ae_rate,
-        data_1,
-        df_ae,
-        df_final,
-        df_ppl,
-        directory_12,
-        filename_11,
-        input_file_name,
-        lm,
-        ppl_rate,
-        row_name,
-    )
+    return (df_final,)
 
 
 @app.cell
@@ -1174,15 +981,15 @@ def _(df_grouped, plt):
 def _(mo):
     mo.md(
         r"""
-        ## これは前の実験結果と思われるので，キャッシュから消さなければ
-        ```
-        jsai-dev-01_Qwen-Qwen2.5-3B-Instruct.parquet
-        jsai-dev-01_Qwen-Qwen2.5-1.5B-Instruct.parquet
-        jsai-dev-01_Qwen-Qwen2.5-0.5B-Instruct.parquet
-        jsai-dev-01_google-gemma-2-9b-it.parquet
-        jsai-dev-01_google-gemma-2-2b-jpn-it.parquet
-        ```
-        """
+    ## これは前の実験結果と思われるので，キャッシュから消さなければ
+    ```
+    jsai-dev-01_Qwen-Qwen2.5-3B-Instruct.parquet
+    jsai-dev-01_Qwen-Qwen2.5-1.5B-Instruct.parquet
+    jsai-dev-01_Qwen-Qwen2.5-0.5B-Instruct.parquet
+    jsai-dev-01_google-gemma-2-9b-it.parquet
+    jsai-dev-01_google-gemma-2-2b-jpn-it.parquet
+    ```
+    """
     )
     return
 
@@ -1202,15 +1009,7 @@ def _(mo):
                   cache_filename=cache_filename,
                   )                    
     cache
-    return (
-        Cache,
-        cache,
-        cache_filename,
-        cfg,
-        compose,
-        directory_15,
-        initialize_config_dir,
-    )
+    return Cache, cache, compose
 
 
 @app.cell
@@ -1246,7 +1045,7 @@ def _(df_grouped, pl):
         cfg_1.set_tbl_rows(30)
         cfg_1.set_fmt_str_lengths(80)
         print(df_grouped['index', 'ae_mean', 'llmjp-score'].sort('index'))
-    return (cfg_1,)
+    return
 
 
 @app.cell
@@ -1257,7 +1056,7 @@ def _(df_final, pl):
         cfg_2.set_fmt_str_lengths(80)
         df_count = df_final.group_by('index').agg(pl.len().alias('count'), pl.col('llmjp-score').first().alias('llmjp-score'))
         print(df_count.sort('index'))
-    return cfg_2, df_count
+    return
 
 
 @app.cell
@@ -1270,7 +1069,7 @@ def _(df_final, pl):
         print(df_select.select(pl.count()))
         df_select = df_select.filter(pl.col('input_file_name') == '職務経歴書サンプル_営業_IT法人営業.txt')
         print(df_select)
-    return cfg_3, df_select
+    return
 
 
 @app.cell
@@ -1295,15 +1094,7 @@ def _(os, pl):
         print(len(sample_list))
     else:
         print('not exist')
-    return (
-        data_2,
-        df_ae_1,
-        df_ppl_1,
-        directory_13,
-        filename_12,
-        lm_1,
-        sample_list,
-    )
+    return
 
 
 @app.cell
@@ -1340,23 +1131,7 @@ def _(llmjp_score, os, pl):
         cfg_4.set_tbl_rows(10)
         cfg_4.set_fmt_str_lengths(40)
         print(df_final_1)
-    return (
-        ae_rate_1,
-        cfg_4,
-        content,
-        data_3,
-        df_ae_2,
-        df_final_1,
-        df_ppl_2,
-        directory_14,
-        filename_13,
-        fp,
-        input_file_name_1,
-        lm_2,
-        original_filename,
-        ppl_rate_1,
-        row_name_1,
-    )
+    return (df_final_1,)
 
 
 @app.cell
@@ -1367,7 +1142,7 @@ def _(df_final_1, pl):
         cfg_5.set_tbl_rows(30)
         cfg_5.set_fmt_str_lengths(80)
         print(df_grouped_1.sort('index'))
-    return cfg_5, df_grouped_1
+    return (df_grouped_1,)
 
 
 @app.cell
@@ -1422,21 +1197,7 @@ def _(df_grouped_1, pl, plt):
     df_grouped_2 = df_grouped_2.filter(~pl.col("index").str.contains("DeepSeek"))
     print(df_grouped_2)
     print(f"相関係数={df_grouped_2.select(pl.corr('ae_mean','llmjp-score'))}")
-    return (
-        LinearRegression,
-        X,
-        Y,
-        ax12,
-        df_grouped_2,
-        fig12,
-        i,
-        label,
-        labels,
-        model,
-        np,
-        x,
-        y,
-    )
+    return LinearRegression, np
 
 
 @app.cell
@@ -1457,7 +1218,7 @@ def _(LinearRegression, df_grouped_1, np, plt):
         plt.text(x_1[i_1], y_1[i_1], label_1)
 
     plt.show()
-    return X_1, Y_1, i_1, label_1, labels_1, model_1, x_1, y_1
+    return
 
 
 @app.cell
@@ -1467,7 +1228,7 @@ def _(df_grouped_1, pl):
         cfg_6.set_tbl_rows(30)
         cfg_6.set_fmt_str_lengths(80)
         print(df_grouped_1.sort('index'))
-    return (cfg_6,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -1483,7 +1244,7 @@ def _(Cache, compose, initialize):
     cache_filename_1 = f'{cfg_7.exp.title}.db'
     cachel4 = Cache(cfg=cfg_7, cache_filename=cache_filename_1)
     cachel4
-    return cache_filename_1, cachel4, cfg_7
+    return (cachel4,)
 
 
 @app.cell
@@ -1509,7 +1270,7 @@ def _(cache, cachel4, src_keys):
     for key in src_keys:
         val = cachel4.get(key)
         cache.set(key, val)
-    return key, val
+    return
 
 
 @app.cell
@@ -1574,7 +1335,7 @@ def _(df_sample, pl):
         cfg_8.set_fmt_str_lengths(40)
         print(df_sample)
         print(df_sample.describe())
-    return (cfg_8,)
+    return
 
 
 @app.cell
@@ -1597,7 +1358,7 @@ def _(df_sample_1, plt, sns):
     plt.xticks(rotation=45)
     plt.legend(title='Type')
     plt.show()
-    return df_sample_melted, ppl_max_5
+    return
 
 
 @app.cell
@@ -1619,7 +1380,7 @@ def _(LinearRegression, df_sample_1, np, pl, plt):
     plt.ylabel('Perplexity')
     plt.grid(axis='y')
     df_sample_1.select(pl.corr('ae', 'ppl'))
-    return X_2, Y_2, japanize_matplotlib, model_2, x_2, y_2
+    return
 
 
 @app.cell
@@ -1638,7 +1399,7 @@ def _(df_sample_1, pl):
         df_sample_with_diff = df_sample_1.with_columns((df_sample_1['ae'] - df_sample_1['ppl'] / df_sample_1['ppl'].max()).alias('diff')).sort('diff')
         print(df_sample_with_diff)
         print(df_sample_with_diff.sort('diff', descending=True))
-    return cfg_9, df_sample_with_diff
+    return (df_sample_with_diff,)
 
 
 @app.cell
@@ -1707,7 +1468,7 @@ def _(LinearRegression, df_sample_1, df_sample_with_diff, np, pl, plt):
     df_sample_with_diff.select(pl.corr('content_length', 'diff'))
     plt.tight_layout()
     plt.show()
-    return X_3, Y_3, axes_5, fig_5, model_3, x_3, y_3
+    return
 
 
 @app.cell
@@ -1727,7 +1488,7 @@ def _(LinearRegression, df_sample_1, np, plt):
     plt.title('圧縮率とPerplexity')
     plt.xlabel('圧縮率')
     plt.ylabel('Perplexity')
-    return X_4, Y_4, model_4, x_4, y_4
+    return
 
 
 @app.cell
@@ -1742,7 +1503,7 @@ def _(df_sample_with_diff, pl, sns):
     df_melt = df_regularized.melt(id_vars=['File'], value_vars=['ppl', 'ae'], variable_name='Type', value_name='Score')
     sns.barplot(x=df_sample_with_diff['input_file_name'][0:n], y=df_sample_with_diff['ae'][0:n], color='blue', label='AE')
     sns.barplot(x=df_sample_with_diff['input_file_name'][0:n], y=df_sample_with_diff['ppl'][0:n], color='blue', label='AE')
-    return cfg_10, df_melt, df_regularized, n
+    return df_regularized, n
 
 
 @app.cell
@@ -1754,7 +1515,7 @@ def _(df_regularized, n, pl, sns):
         cfg_11.set_fmt_str_lengths(20)
         print(df_melt_1)
     sns.barplot(x='input_file_name', y='Score', hue='Type', data=df_melt_1)
-    return cfg_11, df_melt_1
+    return
 
 
 @app.cell

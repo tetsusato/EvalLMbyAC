@@ -1,3 +1,49 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
 *.egg-info/
 dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Experiment / Cache (Main cause of bloat)
+CacheStorage/
+CacheStorage_LLM/
+mlruns/
+log/
+log_ipsj2026paper/
+dev_log/
+summary/
+test_cache_storage/
+
+# IDE / Gemini
+.vscode/
+.gemini/
+.idea/
+.pytest_cache/
+
+# Temporary / Backup
+*~
+\#*\#
+*.log
+*.log.[0-9]
+*.sh~
+*.swp
+debug_output.txt
+test_output.log
+
+# OS
+.DS_Store
+
+# User ignored files
+12635195.txt
+2.0.0
+2.0.1
+small_text.txt
+test-input-data/
