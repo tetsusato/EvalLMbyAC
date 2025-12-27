@@ -30,9 +30,15 @@ def _():
 @app.cell
 def _(Analyzer):
     an = Analyzer("/home/tetsu.sato/IPSJ2026-paper/",
-                  config_name="lmcr_exp_ipsj2026_paper_03")
+                  config_name="lmcr_exp_ipsj2026_paper_07")
     print(an)
     return (an,)
+
+
+@app.cell
+def _():
+    import marimo as mo
+    return (mo,)
 
 
 @app.cell
@@ -65,7 +71,7 @@ def _():
 def _(an):
     result = an.get_leaderboard_result("",
                                       cache_base_name="leaderboard_result",
-                                      cache_tag_name="ipsj2026_paper")
+                                      cache_tag_name="ipsj2026_paper_01")
     print(f"leaderboard result={result}")
     print(f"leaderboard result class={result.__class__}")
     #leaderboard_df = an._leaderboard_data_to_polar_dataframe(result)
@@ -113,8 +119,10 @@ def _(os):
 
 @app.cell
 def _(an, leaderboard_df):
+    # あまり使うことはないメソッドだが，コンソールで設定ファイルを更新してノートブックで実行するということがあり得るので
+    an.reload_config()
     #runs_df_e = an.search_model_from_mlflow(an.models[0:-2], run_name="ipsj2026_paper_02%")
-    runs_df = an.search_model_from_mlflow(run_name="ipsj2026_paper_03%")
+    runs_df = an.search_model_from_mlflow(run_name="ipsj2026_paper_07%")
     print(f"runs_df_e={runs_df}")
     total_exp_df = an.mlflow_results_df_to_analytics_df(runs_df)
     target_leaderboard_df = leaderboard_df.join(total_exp_df, left_on="Model", right_on="tags.model_name", how="inner")

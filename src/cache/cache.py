@@ -47,13 +47,14 @@ class Cache():
             top_dir = cfg.get("top_dir", "CacheStorage")
             root = cfg.get("root", "")
             enable = cfg.get("enable", True)
+            self.overwrite = cfg.get("overwrite", False)
 
         if prefix is not None:
             self.key_prefix = prefix
         else:
             self.key_prefix = root
         
-        logger.debug(f"Creating a cache object. key_prefix={self.key_prefix}, saves to {cache_filename}, enable={enable}")
+        logger.debug(f"Creating a cache object. key_prefix={self.key_prefix}, saves to {cache_filename}, enable={enable}, overwrite={self.overwrite}")
         
         if enable:
             if self.key_prefix:

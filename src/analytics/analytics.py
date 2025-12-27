@@ -65,12 +65,12 @@ class Analyzer:
         """
         
         project_root_path = Path(project_root)
-        config = config_name
-        config_dir = project_root_path / "config"
+        self.config_name = config_name
+        self.config_dir = project_root_path / "config"
         with initialize_config_dir(version_base=None,
-                                   config_dir=str(config_dir),
+                                      config_dir=str(self.config_dir),
                                    ):
-            cfg = compose(config_name=config)
+            cfg = compose(config_name=self.config_name)
         self.cfg = cfg
         self.cache = Cache(cfg=cfg,
               cache_filename="cache_test",
@@ -78,6 +78,19 @@ class Analyzer:
               )
         mlflow.set_tracking_uri("http://localhost:8080")
 
+    def reload_config(self,
+                     ):
+        with initialize_config_dir(version_base=None,
+                                      config_dir=str(self.config_dir),
+                                   ):
+            cfg = compose(config_name=self.config_name)
+        self.cfg = cfg  # 更新
+        self.cache = Cache(cfg=cfg,
+              cache_filename="cache_test",
+              prefix="test",
+              )
+
+        
     def get_leaderboard_result(self,
                                query,
                                cache_base_name="leaderboard_result",
@@ -227,6 +240,22 @@ class Analyzer:
                                  size_filter=None,
                                  run_name=None,
                                  ):
+        """
+        MLflowからモデルの実験結果を検索し、各モデルの最新の実行結果を取得する。
+
+        指定されたモデル名（queries）と実験タイトル（run_name）に一致する実行（run）を検索し、
+        モデル名、アルゴリズム、入力テキスト長ごとに最新の1件を抽出して結合したデータを返します。
+
+        Args:
+            queries (list[str], optional): 検索対象のモデル名のリスト。
+                Noneの場合はHydra設定（self.cfg.exp_models.target_models）を使用します。
+            size_filter (int, optional): 入力テキスト長（metrics.input_text_length）でフィルタリングする場合の数値。
+            run_name (str, optional): 検索対象の実験タイトル（tags.exp_title）。
+
+        Returns:
+            pl.DataFrame: 検索結果を格納したPolars DataFrame。
+                各モデル名、アルゴリズム、入力長に対して最新の1件のみが含まれます。
+        """
         # 条件をフィルタリングして検索（DataFrameで返る）
         
         if queries is None:
@@ -251,7 +280,7 @@ class Analyzer:
             #print(f"query string={query_string}")
             filter_string = f"tags.model_name like '{query}' and "\
                             + f"tags.exp_title like '{run_name}'"
-            print(f"filter string={filter_string}")
+            #print(f"filter string={filter_string}")
             df = mlflow.search_runs(
                 search_all_experiments=True,
                 #experiment_names=[experiment_id],
@@ -262,7 +291,7 @@ class Analyzer:
                 order_by=["start_time DESC"],
                 output_format="pandas"
             )
-            #print(f"df={df}")
+            #print(f"df from mlflow.search_runs={df}")
             #print(f"include tags.model_name?={df}")
             if df.empty is False:
                 df = df.sort_values("start_time", ascending=False)\

@@ -373,7 +373,8 @@ class LMCR:
         logger.debug(f"cache={self.cache}")
         logger.debug(f"basic_info={basic_info}")
         # キャッシュが有効な場合、過去の実験結果を確認
-        if self.L1_CACHE is not None:
+        # overwrite が True の場合はキャッシュを無視する
+        if self.L1_CACHE is not None and not self.L1_CACHE.overwrite:
             cache_key = self.get_cache_key(func)
             logger.debug(f"cache key={cache_key}")
             if cache_key is not None:
@@ -384,6 +385,8 @@ class LMCR:
                 logger.debug("cache key not found")
                 cache_val = None
         else:
+            if self.L1_CACHE is not None and self.L1_CACHE.overwrite:
+                logger.info("L1_CACHE overwrite is True. Skipping cache lookup.")
             cache_val = None
         # キャッシュがない場合は実際に実験を実行
         if cache_val is None:
@@ -523,8 +526,9 @@ class LMCR:
         progress.info(f"file={text_path}, contents={msg_example}")
         # エンコード（圧縮）の実行
 
-        l2_cache_key = f"{self.exp_title}-{self.model_name_safe}-{input_dir}-{text_path}-{func_name}"
-        if self.L2_CACHE is not None:
+        l2_cache_key = f"{self.model_name_safe}-{input_dir}-{text_path}-{func_name}"
+        code = None
+        if self.L2_CACHE is not None and not self.L2_CACHE.overwrite:
 
             code = self.L2_CACHE.get(l2_cache_key)
             if code is not None:
@@ -640,27 +644,25 @@ class LMCR:
         return result_df
 
     def perplexity_test(self,
-                           input_dir: str,
-                           text_path: str,
-                           basic_info: str,
+                        input_dir: str,
+                        text_path: str,
+                        basic_info: str,
                         func_name: str,
-                           ):
+                        ) -> pl.DataFrame:
         """
         パープレキシティ（困惑度）を計算する
-        
-        言語モデルが入力テキストをどれだけ予測できるかを評価する指標。
-        値が低いほどモデルがテキストをよく理解していることを示す。
-        
-        Args:
-            input_dir: 入力ファイルのディレクトリ
-            text_path: 入力ファイルのパス
-            basic_info: 実験の基本情報
-            func_name: 関数名
-            
-        Returns:
-            pl.DataFrame: パープレキシティスコアを含む実験結果
         """
-        
+        l2_cache_key = f"{self.model_name_safe}-{text_path}-{func_name}"
+        if self.L2_CACHE is not None and not self.L2_CACHE.overwrite:
+            cache_val = self.L2_CACHE.get(l2_cache_key)
+            if cache_val is not None:
+                logger.info(f"L2 Cache hit for Perplexity: {l2_cache_key}")
+                # cache_val は Result オブジェクトの想定
+                return pl.DataFrame([cache_val])
+        elif self.L2_CACHE is not None and self.L2_CACHE.overwrite:
+            logger.info(f"L2_CACHE overwrite is True. Skipping cache lookup for {l2_cache_key}.")
+
+        # キャッシュがない場合は計算
         total_start = time.time()
         perplexity = Perplexity(
                                 lm=self.model,
@@ -673,14 +675,14 @@ class LMCR:
         text_limit = 300
         progress.info(f"[0] Encoding... `{msg[:text_limit]}`")
         start = time.time()
-        score = perplexity.calculate(
-                           msg
-                          )
+        score = perplexity.calculate(msg)
         end = time.time()
-        encode_time = end-start
+        encode_time = end - start
+        
         model_name = self.model.name_or_path
-        title = f"{self.exp_title}(ppl)"
+        title = self.exp_title
         hosting = self.hosting
+        
         result = Result(
                         title,
                         self.encoding_algorithm,
@@ -694,11 +696,11 @@ class LMCR:
                         encode_time,
                         None,
                         basic_info,
+                        vocab_size=self.tokenizer_vocab_size,
                        )
 
-        if self.L1_CACHE is not None:
-            cache_key = f"{self.exp_title}-{model_name}-{text_path}-{func_name}"
-            self.L1_CACHE.set(cache_key, result)
+        if self.L2_CACHE is not None:
+            self.L2_CACHE.set(l2_cache_key, result)
 
         result_df = pl.DataFrame([result])
         print(result_df)
